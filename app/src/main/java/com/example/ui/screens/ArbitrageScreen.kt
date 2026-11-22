@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.example.core.Formatters
 import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
@@ -73,7 +74,13 @@ fun ArbitrageScreen(
             onDismissRequest = { inspectedOpp = null },
             containerColor = LgColors.PanelSlate,
             title = {
-                Text("${opp.buyVenue} -> ${opp.sellVenue} (${opp.symbol})", style = MaterialTheme.typography.titleLarge, color = LgColors.Gold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CoinAvatar(opp.symbol, size = 28.dp)
+                    Text("${opp.buyVenue} -> ${opp.sellVenue} (${opp.symbol})", style = MaterialTheme.typography.titleLarge, color = LgColors.Gold)
+                }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -122,7 +129,7 @@ fun ArbitrageScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg),
+            .background(Color.Transparent),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -187,6 +194,7 @@ fun ArbitrageScreen(
                         FilterChip(
                             selected = coin == state.symbol,
                             onClick = { onUpdateParams(coin, null, null, null, null) },
+                            leadingIcon = { CoinAvatar(coin, size = 18.dp) },
                             label = { Text(coin) }
                         )
                     }
@@ -368,16 +376,23 @@ fun ArbitrageScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "${tr.symbol}: ${tr.buyVenue} -> ${tr.sellVenue}",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "$${"%.0f".format(tr.notionalUsd)} · ${Formatters.formatBps(tr.grossSpreadBps)} · ${Formatters.formatTimeShort(tr.timestampMs)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LgColors.InkMuted
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CoinAvatar(tr.symbol, size = 28.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${tr.symbol}: ${tr.buyVenue} -> ${tr.sellVenue}",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "$${"%.0f".format(tr.notionalUsd)} · ${Formatters.formatBps(tr.grossSpreadBps)} · ${Formatters.formatTimeShort(tr.timestampMs)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LgColors.InkMuted
+                                )
+                            }
                         }
                         StatusPill(
                             text = "+${Formatters.formatUsd(tr.worstCaseNetUsd)}",

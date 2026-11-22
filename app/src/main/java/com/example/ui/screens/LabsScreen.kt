@@ -58,6 +58,9 @@ import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.MetricTile
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.LgColors
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.TabLabelTextStyle
 import com.example.viewmodel.ArbitrageUiState
 import com.example.viewmodel.LabsUiState
 import com.example.viewmodel.VaultUiState
@@ -66,7 +69,7 @@ enum class LabsTool(val label: String) {
     ARBITRAGE("Arbitrage"),
     SPORTS("Sports"),
     EARN_RISK("Earn & Risk"),
-    MINING("Mining"),
+    MINING("Miner"),
     BREAKOUT("Breakouts"),
     DEX_RESEARCH("DEX & Res")
 }
@@ -96,9 +99,9 @@ fun LabsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg)
+            .background(Color.Transparent)
     ) {
-        // 3x2 Quant Labs Selector Header
+        // 3x2 Quant Labs Selector Header with bold stylish font
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -121,10 +124,18 @@ fun LabsScreen(
                                     onScanBreakouts()
                                 }
                             },
-                            label = { Text(tool.label, maxLines = 1) },
+                            label = {
+                                Text(
+                                    text = tool.label.uppercase(),
+                                    style = TabLabelTextStyle,
+                                    maxLines = 1
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LgColors.CyanGlow.copy(alpha = 0.2f),
-                                selectedLabelColor = LgColors.CyanGlow
+                                selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
+                                selectedLabelColor = LgColors.Gold,
+                                containerColor = LgColors.PanelSlate.copy(alpha = 0.8f),
+                                labelColor = LgColors.InkSecondary
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -162,25 +173,27 @@ fun LabsScreen(
                     }
 
                     LabsTool.MINING -> {
-                        // AE2 Miner Status Card (matches Image 3 Mining graphic)
+                        // Miner Status Card (clean 16:9 Miner Rig fit, no AE2 branding)
                         item {
-                            CyberFrameCard(title = "AE2 MINER STATUS") {
+                            CyberFrameCard(title = "MINER STATUS") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(176.dp)
+                                        .aspectRatio(16f / 9f)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .border(1.dp, LgColors.CyanGlow.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                        .background(LgColors.ObsidianBg)
+                                        .border(1.dp, LgColors.Turquoise.copy(alpha = 0.55f), RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Image(
-                                        painter = painterResource(id = R.drawable.img_user_miner_ae2),
-                                        contentDescription = "IceRiver AE2 ALEO zkSNARK Miner",
-                                        contentScale = ContentScale.Crop,
+                                        painter = painterResource(id = R.drawable.img_miner_rig),
+                                        contentDescription = "Crypto Miner Hardware Rig",
+                                        contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    MetricTile("Hardware", "IceRiver AE2", LgColors.Gold, Modifier.weight(1f))
+                                    MetricTile("Hardware", "ASIC Miner", LgColors.Gold, Modifier.weight(1f))
                                     MetricTile("Hashrate", "720 MH/s", LgColors.Turquoise, Modifier.weight(1f))
                                     MetricTile("Power", "1300W", LgColors.CyanGlow, Modifier.weight(1f))
                                 }
@@ -219,8 +232,18 @@ fun LabsScreen(
                                 items(ms.data) { q ->
                                     GlassPanelCard {
                                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("${q.symbol} · ${q.name}", style = MaterialTheme.typography.titleMedium)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    CoinAvatar(q.symbol, size = 30.dp)
+                                                    Text("${q.symbol} · ${q.name}", style = MaterialTheme.typography.titleMedium)
+                                                }
                                                 StatusPill(q.algorithm, LgColors.Gold)
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -318,6 +341,7 @@ fun LabsScreen(
                                         FilterChip(
                                             selected = c.symbol == state.researchSymbol,
                                             onClick = { onAnalyzeResearch(c.symbol) },
+                                            leadingIcon = { CoinAvatar(c.symbol, size = 18.dp) },
                                             label = { Text(c.symbol) }
                                         )
                                     }
@@ -421,9 +445,16 @@ fun LabsScreen(
                                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("${p.baseSymbol} / ${p.quoteSymbol}", style = MaterialTheme.typography.titleMedium)
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        CoinAvatar(p.baseSymbol, size = 26.dp)
+                                                        Text("${p.baseSymbol} / ${p.quoteSymbol}", style = MaterialTheme.typography.titleMedium)
+                                                    }
                                                     StatusPill("${p.chainId} · ${p.dexId}", LgColors.CyanGlow)
                                                 }
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

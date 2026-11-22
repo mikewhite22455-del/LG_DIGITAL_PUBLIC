@@ -44,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.example.R
 import com.example.core.Formatters
 import com.example.domain.models.StrategyType
@@ -109,38 +110,31 @@ fun AdvisorScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg),
+            .background(Color.Transparent),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // AI Advisor Terminal Hero + Streaming Chat (matches Image 4 center)
+        // AI Advisor Hero Portrait + Streaming Chat (clean robot portrait, no descriptive blurb beside robot head)
         item {
-            CyberFrameCard(title = "AI ADVISOR TERMINAL") {
-                Row(
+            CyberFrameCard(title = "TRADING ADVISOR ANALYSIS") {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.img_user_advisor_robot),
-                        contentDescription = "LG Digital AI Trading Advisor",
+                        contentDescription = "Trading Advisor",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(92.dp)
                             .clip(CircleShape)
-                            .border(1.5.dp, LgColors.CyanGlow.copy(alpha = 0.7f), CircleShape)
+                            .border(2.dp, LgColors.Gold.copy(alpha = 0.78f), CircleShape)
                     )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("LG Quant Copilot", style = MaterialTheme.typography.titleLarge, color = LgColors.Gold)
-                        Text(
-                            text = "Gemini 3.8 Flash · Grounded in live ${tradeState.symbol} & paper vault telemetry",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = LgColors.InkSecondary
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            StatusPill("${tradeState.symbol} ${tradeState.timeframe.label}", LgColors.CyanGlow)
-                            StatusPill(tradeState.strategy.title, LgColors.Turquoise)
-                        }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CoinAvatar(tradeState.symbol, size = 24.dp)
+                        StatusPill("${tradeState.symbol} ${tradeState.timeframe.label}", LgColors.Turquoise)
+                        StatusPill(tradeState.strategy.title, LgColors.Gold)
                     }
                 }
 

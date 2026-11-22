@@ -82,6 +82,7 @@ import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.GoldMetallicButton
+import com.example.ui.components.LgCircuitBackground
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.LgColors
 import com.example.viewmodel.AdvisorUiState
@@ -117,8 +118,8 @@ private val previewPages = listOf(
     PagePreviewDescriptor(
         id = PreviewDestination.HOME,
         badge = "PAGE 1 / 9",
-        title = "Home · Tour & Coin Watch",
-        subtitle = "Visual Tour hub, 24h Top Gainers & Losers, Market Radar, Spot Watch & News Wire",
+        title = "Home",
+        subtitle = "Portfolio summary, 24h Top Gainers & Losers, Market Pulse, Price Feeds & News Wire",
         icon = Icons.Filled.Home,
         heroDrawable = R.drawable.img_user_lg_coin
     ),
@@ -134,7 +135,7 @@ private val previewPages = listOf(
         id = PreviewDestination.ADVISOR,
         badge = "PAGE 3 / 9",
         title = "Advisor · AI Terminal",
-        subtitle = "Gemini 3.8 Flash streaming chat, Strategy Presets, Risk Guards & Sentiment Arc Gauges",
+        subtitle = "Streaming Trading Advisor chat, Strategy Presets, Risk Guards & Sentiment Arc Gauges",
         icon = Icons.Filled.AutoAwesome,
         heroDrawable = R.drawable.img_user_advisor_robot
     ),
@@ -149,7 +150,7 @@ private val previewPages = listOf(
         id = PreviewDestination.LABS_SPORTS,
         badge = "PAGE 5 / 9",
         title = "Labs · Sports Edge",
-        subtitle = "6 Sport Categories presets, Two-Way Arb & De-Vig, Kelly Sizing & Poisson Matrix",
+        subtitle = "6 Sports League Logos, Two-Way Arb & De-Vig, Kelly Sizing & Poisson Matrix",
         icon = Icons.Filled.SportsScore
     ),
     PagePreviewDescriptor(
@@ -162,10 +163,10 @@ private val previewPages = listOf(
     PagePreviewDescriptor(
         id = PreviewDestination.LABS_MINING,
         badge = "PAGE 7 / 9",
-        title = "Labs · AE2 Mining",
-        subtitle = "IceRiver AE2 Miner Status (720 MH/s · 1300W) & live CoinSpectrum PoW feed",
+        title = "Labs · Miner",
+        subtitle = "Miner Hardware Status (720 MH/s · 1300W) & live CoinSpectrum PoW feed",
         icon = Icons.Filled.Memory,
-        heroDrawable = R.drawable.img_user_miner_ae2
+        heroDrawable = R.drawable.img_miner_rig
     ),
     PagePreviewDescriptor(
         id = PreviewDestination.VAULT,
@@ -178,7 +179,7 @@ private val previewPages = listOf(
         id = PreviewDestination.HELP,
         badge = "PAGE 9 / 9",
         title = "Support & Walkthrough",
-        subtitle = "3-card Contact, Robot Walkthrough Tour & Get Help AI Diagnostics",
+        subtitle = "3-card Contact, Robot Walkthrough & Get Help AI Diagnostics",
         icon = Icons.Filled.SupportAgent,
         heroDrawable = R.drawable.img_user_walkthrough_bot
     )
@@ -245,6 +246,7 @@ fun AllPagesPreviewOverlay(
                 .fillMaxSize()
                 .systemBarsPadding()
         ) {
+            LgCircuitBackground(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header Bar
                 Row(
@@ -673,6 +675,7 @@ fun AllPagesPreviewOverlay(
                         }
                     }
                 }
+            }
             }
         }
     }

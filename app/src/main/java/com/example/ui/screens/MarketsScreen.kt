@@ -182,13 +182,13 @@ fun MarketsScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg),
+            .background(Color.Transparent),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Hero Visual Tour Hub (matches uploaded Image 3 landing preview)
+        // Home Quick-Launch Hub
         item {
-            CyberFrameCard(title = "NEW HERE? START WITH THE VISUAL TOUR") {
+            CyberFrameCard(title = "HOME") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -250,9 +250,9 @@ fun MarketsScreen(
                             .testTag("tour_advisor_card")
                     )
                     VisualTourTile(
-                        title = "Mining",
-                        subtitle = "AE2 Rig",
-                        imageRes = R.drawable.img_user_miner_ae2,
+                        title = "Miner",
+                        subtitle = "ASIC Rig",
+                        imageRes = R.drawable.img_miner_rig,
                         accent = LgColors.Turquoise,
                         onClick = onNavigateToMining,
                         modifier = Modifier
@@ -370,10 +370,10 @@ fun MarketsScreen(
             }
         }
 
-        // Coin Watch & News Wire Card
+        // Home Price Feed & News Wire Card
         item {
             var showNewsTab by remember { mutableStateOf(false) }
-            CyberFrameCard(title = if (showNewsTab) "COINDESK LIVE WIRE" else "COIN WATCH") {
+            CyberFrameCard(title = if (showNewsTab) "COINDESK LIVE WIRE" else "HOME") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)

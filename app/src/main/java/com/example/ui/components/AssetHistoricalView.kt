@@ -183,6 +183,7 @@ fun AssetHistoricalView(
                         FilterChip(
                             selected = selected,
                             onClick = { onSelectSymbol(sym) },
+                            leadingIcon = { CoinAvatar(symbol = sym, size = 18.dp) },
                             label = { Text(sym, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -228,8 +229,8 @@ fun AssetHistoricalView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF070E1A))
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                    .background(LgColors.ObsidianBg.copy(alpha = 0.88f))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
                     .padding(12.dp)
             ) {
                 when (historyState) {

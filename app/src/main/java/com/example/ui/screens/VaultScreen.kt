@@ -23,7 +23,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -50,12 +52,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.BiometricAuthManager
+import com.example.core.BiometricCapability
 import com.example.core.Formatters
 import com.example.data.local.PayoutRuleEntity
 import com.example.ui.components.CoinAvatar
@@ -78,8 +84,15 @@ fun VaultScreen(
     onRemoveWatchlist: (String) -> Unit,
     onAddWatchWallet: (String, String, String) -> Unit,
     onRemoveWatchWallet: (Long) -> Unit,
-    onOpenHelpSheet: () -> Unit
+    onOpenHelpSheet: () -> Unit,
+    biometricLockEnabled: Boolean = true,
+    autoLockOnBackground: Boolean = true,
+    onToggleBiometricLock: (Boolean) -> Unit = {},
+    onToggleAutoLockBackground: (Boolean) -> Unit = {},
+    onLockDashboardNow: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val biometricCapability = remember { BiometricAuthManager.checkCapability(context) }
     val rule = vaultState.payoutRule
     var autoSweepText by remember(rule.autoSweepUsd) { mutableStateOf(rule.autoSweepUsd.toInt().toString()) }
     var targetCoin by remember(rule.targetCoin) { mutableStateOf(rule.targetCoin) }
@@ -93,7 +106,7 @@ fun VaultScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg),
+            .background(Color.Transparent),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -216,6 +229,7 @@ fun VaultScreen(
                         FilterChip(
                             selected = targetCoin == coin,
                             onClick = { targetCoin = coin },
+                            leadingIcon = { CoinAvatar(coin, size = 18.dp) },
                             label = { Text(coin) },
                             modifier = Modifier.weight(1f)
                         )
@@ -285,6 +299,58 @@ fun VaultScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = LgColors.Turquoise)
+                        Column {
+                            Text("Biometric Dashboard Lock", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = biometricCapability.statusLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (biometricCapability == BiometricCapability.READY) LgColors.Turquoise else LgColors.Gold
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = biometricLockEnabled,
+                        onCheckedChange = onToggleBiometricLock,
+                        colors = SwitchDefaults.colors(checkedThumbColor = LgColors.ObsidianBg, checkedTrackColor = LgColors.Turquoise),
+                        modifier = Modifier.testTag("vault_biometric_lock_switch")
+                    )
+                }
+                if (biometricLockEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Auto-Lock After Background (15s)", style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = autoLockOnBackground,
+                            onCheckedChange = onToggleAutoLockBackground,
+                            colors = SwitchDefaults.colors(checkedThumbColor = LgColors.ObsidianBg, checkedTrackColor = LgColors.Turquoise),
+                            modifier = Modifier.testTag("vault_autolock_switch")
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onLockDashboardNow,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("vault_lock_now_button")
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(18.dp))
+                        Text("Lock Trading Dashboard Now")
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text("API Key Rotation Reminders", style = MaterialTheme.typography.bodyMedium)
                     Switch(
                         checked = rule.apiKeyRotationReminder,
@@ -338,9 +404,16 @@ fun VaultScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("${w.symbol} · ${w.regimeLabel}", style = MaterialTheme.typography.titleMedium)
-                            Text("24h Proj ${Formatters.formatUsd(w.projected24hUsd)} · ${w.notes}", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CoinAvatar(w.symbol, size = 28.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${w.symbol} · ${w.regimeLabel}", style = MaterialTheme.typography.titleMedium)
+                                Text("24h Proj ${Formatters.formatUsd(w.projected24hUsd)} · ${w.notes}", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
+                            }
                         }
                         IconButton(onClick = { onRemoveWatchlist(w.symbol) }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Remove watchlist item", tint = LgColors.InkMuted)
@@ -359,9 +432,16 @@ fun VaultScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("${tl.side} ${tl.symbol} · ${Formatters.formatUsd(tl.notionalUsd)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("${tl.strategyId} · ${Formatters.formatTimeShort(tl.timestampMs)}", style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted)
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CoinAvatar(tl.symbol, size = 28.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${tl.side} ${tl.symbol} · ${Formatters.formatUsd(tl.notionalUsd)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text("${tl.strategyId} · ${Formatters.formatTimeShort(tl.timestampMs)}", style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted)
+                            }
                         }
                         if (tl.side == "SELL") {
                             StatusPill(
@@ -389,10 +469,11 @@ fun VaultScreen(
                 }
                 OutlinedTextField(value = walletLabel, onValueChange = { walletLabel = it }, label = { Text("Label (e.g. Ledger Main)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Bitcoin", "Ethereum", "Solana").forEach { net ->
+                    listOf("Bitcoin" to "BTC", "Ethereum" to "ETH", "Solana" to "SOL").forEach { (net, sym) ->
                         FilterChip(
                             selected = walletNetwork == net,
                             onClick = { walletNetwork = net },
+                            leadingIcon = { CoinAvatar(sym, size = 18.dp) },
                             label = { Text(net) },
                             modifier = Modifier.weight(1f)
                         )
@@ -415,15 +496,28 @@ fun VaultScreen(
         }
 
         items(vaultState.watchWallets, key = { it.id }) { w ->
+            val netSym = when (w.network.lowercase()) {
+                "bitcoin" -> "BTC"
+                "ethereum" -> "ETH"
+                "solana" -> "SOL"
+                else -> w.network.take(3).uppercase()
+            }
             GlassPanelCard {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("${w.label} (${w.network})", style = MaterialTheme.typography.titleMedium)
-                        Text(w.address, style = MaterialTheme.typography.labelSmall, color = LgColors.CyanGlow, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        CoinAvatar(netSym, size = 28.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("${w.label} (${w.network})", style = MaterialTheme.typography.titleMedium)
+                            Text(w.address, style = MaterialTheme.typography.labelSmall, color = LgColors.CyanGlow, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     IconButton(onClick = { onRemoveWatchWallet(w.id) }) {
                         Icon(Icons.Filled.Delete, contentDescription = "Remove watch address", tint = LgColors.InkMuted)
@@ -442,7 +536,7 @@ fun VaultScreen(
                 ) {
                     Icon(Icons.Filled.HelpOutline, contentDescription = null, tint = LgColors.Gold, modifier = Modifier.size(32.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Need a guided tour or desk help?", style = MaterialTheme.typography.titleMedium)
+                        Text("Need help navigating the desk?", style = MaterialTheme.typography.titleMedium)
                         Text("Open the interactive 3-card Support & Walkthrough hub.", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
                     }
                 }
@@ -516,9 +610,9 @@ fun HelpWalkthroughContent(
     var walkthroughStep by remember { mutableStateOf(0) }
     val steps = remember {
         listOf(
-            "1. Live Market Overview & Visual Tour" to "Tap any coin in Home to inspect 24h range, launch Candlestick charts, or scan cross-exchange arbitrage spreads.",
+            "1. Home & Live Market Overview" to "Tap any coin in Home to inspect 24h range, launch Candlestick charts, or scan cross-exchange arbitrage spreads.",
             "2. Adaptive Autopilot & Risk Guard" to "Pick LOW / MEDIUM / HIGH risk sizing, configure quiet stop hours and Max DD guard, then arm or test individual ticks in Trade.",
-            "3. Gemini AI Copilot & Labs" to "Use Quant Labs for Sports Edge, Kelly Sizing, ALEO/USDT Earn yields, AE2 Miner status, and ask the AI Advisor anything about live telemetry."
+            "3. AI Advisor & Quant Labs" to "Use Quant Labs for Sports Leagues Edge, Kelly Sizing, ALEO/USDT Earn yields, Miner status, and ask the AI Advisor anything about live telemetry."
         )
     }
 

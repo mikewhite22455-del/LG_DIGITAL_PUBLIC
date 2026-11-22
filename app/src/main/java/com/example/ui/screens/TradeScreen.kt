@@ -67,7 +67,9 @@ import com.example.ui.components.MetricTile
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SignalBadge
 import com.example.ui.components.StatusPill
+import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.LgColors
+import com.example.ui.theme.TabLabelTextStyle
 import com.example.viewmodel.TradeUiState
 import com.example.viewmodel.VaultUiState
 
@@ -115,7 +117,7 @@ fun TradeScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(LgColors.ObsidianBg),
+            .background(Color.Transparent),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -153,10 +155,11 @@ fun TradeScreen(
                         FilterChip(
                             selected = entry.symbol == state.symbol,
                             onClick = { onSelectSymbol(entry.symbol) },
+                            leadingIcon = { CoinAvatar(entry.symbol, size = 18.dp) },
                             label = { Text(entry.symbol) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.2f),
-                                selectedLabelColor = LgColors.Turquoise
+                                selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
+                                selectedLabelColor = LgColors.Gold
                             ),
                             modifier = Modifier.testTag("trade_coin_${entry.symbol}")
                         )
@@ -261,10 +264,18 @@ fun TradeScreen(
                     FilterChip(
                         selected = panel == activeSubPanel,
                         onClick = { chooseSubPanel(panel) },
-                        label = { Text(panel.label, maxLines = 1) },
+                        label = {
+                            Text(
+                                text = panel.label.uppercase(),
+                                style = TabLabelTextStyle,
+                                maxLines = 1
+                            )
+                        },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LgColors.Gold.copy(alpha = 0.2f),
-                            selectedLabelColor = LgColors.Gold
+                            selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
+                            selectedLabelColor = LgColors.Gold,
+                            containerColor = LgColors.PanelSlate.copy(alpha = 0.8f),
+                            labelColor = LgColors.InkSecondary
                         ),
                         modifier = Modifier
                             .weight(1f)

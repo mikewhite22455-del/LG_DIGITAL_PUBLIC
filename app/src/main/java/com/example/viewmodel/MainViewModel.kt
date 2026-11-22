@@ -813,6 +813,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun logSecurityEvent(eventType: String, summary: String) {
+        viewModelScope.launch {
+            repository.logMemory(eventType, "SECURITY", summary)
+        }
+    }
+
     private fun currentPriceFor(symbol: String): Double? {
         val tickers = (_marketsState.value.tickersState as? UiState.Success)?.data ?: return null
         return tickers.firstOrNull { it.symbol.equals(symbol, ignoreCase = true) }?.priceUsd

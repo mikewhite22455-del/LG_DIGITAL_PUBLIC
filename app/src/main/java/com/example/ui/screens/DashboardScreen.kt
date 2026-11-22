@@ -265,7 +265,7 @@ fun DashboardScreen(
         onRefresh = onRefreshAll,
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Transparent)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -692,7 +692,7 @@ private fun PortfolioHeroM3Card(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Autopilot, AI Copilot & AE2",
+                                text = "Autopilot, AI Advisor & Miner",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.SemiBold
@@ -760,7 +760,7 @@ private fun PortfolioHeroM3Card(
                     MetricTile("Strategy", vaultState.account.selectedStrategyId.replace('_', ' ').uppercase(), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
                 }
 
-                // Quick Visual Tour Bar using M3 Cards & Artwork
+                // Quick Home Shortcuts Bar using M3 Cards & Artwork
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -774,8 +774,8 @@ private fun PortfolioHeroM3Card(
                             .testTag("tour_advisor_card")
                     )
                     DashboardShortcutTile(
-                        title = "AE2 Rig",
-                        imageRes = R.drawable.img_user_miner_ae2,
+                        title = "Miner",
+                        imageRes = R.drawable.img_miner_rig,
                         onClick = onNavigateToMining,
                         modifier = Modifier
                             .weight(1f)

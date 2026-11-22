@@ -9,17 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SportsBaseball
-import androidx.compose.material.icons.filled.SportsBasketball
-import androidx.compose.material.icons.filled.SportsFootball
-import androidx.compose.material.icons.filled.SportsHockey
-import androidx.compose.material.icons.filled.SportsMma
-import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,20 +22,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.core.Formatters
 import com.example.domain.engine.CalculatorsEngine
+import com.example.ui.components.CoinAvatar
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.MetricTile
+import com.example.ui.components.SportsLeagueLogo
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.LgColors
+import com.example.ui.theme.TabLabelTextStyle
 
 private data class SportCategoryPreset(
     val name: String,
-    val icon: ImageVector,
+    val leagueCode: String,
     val matchLabel: String,
     val oddsA: String,
     val oddsB: String,
@@ -54,12 +47,12 @@ private data class SportCategoryPreset(
 )
 
 private val sportCategories = listOf(
-    SportCategoryPreset("Football", Icons.Filled.SportsFootball, "NE vs BUF · O/U 44.5", "2.18", "2.05", "53.5", "2.4", "2.1"),
-    SportCategoryPreset("Basketball", Icons.Filled.SportsBasketball, "BOS vs NYK · Total 219.5", "2.12", "2.08", "52.0", "1.9", "1.7"),
-    SportCategoryPreset("Hockey", Icons.Filled.SportsHockey, "TOR vs EDM · Puck Line", "2.25", "1.96", "51.5", "3.2", "2.7"),
-    SportCategoryPreset("Baseball", Icons.Filled.SportsBaseball, "NYY vs LAD · F5 Run Line", "2.10", "2.04", "52.5", "2.6", "2.1"),
-    SportCategoryPreset("Soccer", Icons.Filled.SportsSoccer, "ARS vs MCI · Asian Hcp", "2.15", "2.06", "54.0", "1.65", "1.15"),
-    SportCategoryPreset("MMA", Icons.Filled.SportsMma, "Main Card · Method/ML", "2.30", "1.92", "49.5", "1.4", "1.1")
+    SportCategoryPreset("Football", "NFL", "NE vs BUF · O/U 44.5", "2.18", "2.05", "53.5", "2.4", "2.1"),
+    SportCategoryPreset("Basketball", "NBA", "BOS vs NYK · Total 219.5", "2.12", "2.08", "52.0", "1.9", "1.7"),
+    SportCategoryPreset("Hockey", "NHL", "TOR vs EDM · Puck Line", "2.25", "1.96", "51.5", "3.2", "2.7"),
+    SportCategoryPreset("Baseball", "MLB", "NYY vs LAD · F5 Run Line", "2.10", "2.04", "52.5", "2.6", "2.1"),
+    SportCategoryPreset("Soccer", "EPL", "ARS vs MCI · Asian Hcp", "2.15", "2.06", "54.0", "1.65", "1.15"),
+    SportCategoryPreset("MMA", "UFC", "Main Card · Method/ML", "2.30", "1.92", "49.5", "1.4", "1.1")
 )
 
 @Composable
@@ -98,8 +91,8 @@ fun SportsCalculatorsSection() {
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // 1. Sport Categories Selector (matches Image 1 left pane)
-        CyberFrameCard(title = "SPORTS CATEGORIES") {
+        // 1. Sport Categories Selector with authentic League Logos (NFL, NBA, NHL, MLB, EPL, UFC)
+        CyberFrameCard(title = "SPORTS LEAGUES & CATEGORIES") {
             val rows = sportCategories.chunked(2)
             rows.forEach { pair ->
                 Row(
@@ -111,12 +104,15 @@ fun SportsCalculatorsSection() {
                         Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 52.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSel) LgColors.CyanGlow.copy(alpha = 0.16f) else LgColors.ElevatedSlate.copy(alpha = 0.65f))
+                                .background(
+                                    if (isSel) LgColors.Turquoise.copy(alpha = 0.18f)
+                                    else LgColors.ElevatedSlate.copy(alpha = 0.72f)
+                                )
                                 .border(
-                                    width = 1.dp,
-                                    color = if (isSel) LgColors.CyanGlow else LgColors.BorderHairline,
+                                    width = if (isSel) 1.4.dp else 1.dp,
+                                    color = if (isSel) LgColors.Gold else LgColors.BorderHairline,
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .clickable {
@@ -128,31 +124,42 @@ fun SportsCalculatorsSection() {
                                     poisHome = sport.homeXg
                                     poisAway = sport.awayXg
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
                                 .testTag("sport_category_${sport.name.lowercase()}"),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = sport.icon,
-                                contentDescription = sport.name,
-                                tint = if (isSel) LgColors.CyanGlow else LgColors.Gold,
-                                modifier = Modifier.size(20.dp)
+                            SportsLeagueLogo(
+                                league = sport.leagueCode,
+                                size = 30.dp
                             )
-                            Text(
-                                text = sport.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (isSel) LgColors.CyanGlow else LgColors.InkPrimary
-                            )
+                            Column {
+                                Text(
+                                    text = sport.leagueCode,
+                                    style = TabLabelTextStyle,
+                                    color = if (isSel) LgColors.Gold else LgColors.Turquoise
+                                )
+                                Text(
+                                    text = sport.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSel) LgColors.InkPrimary else LgColors.InkSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
-            Text(
-                text = "Loaded template: ${selectedSport.matchLabel}",
-                style = MaterialTheme.typography.labelMedium,
-                color = LgColors.Gold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SportsLeagueLogo(league = selectedSport.leagueCode, size = 22.dp)
+                Text(
+                    text = "${selectedSport.leagueCode} · ${selectedSport.matchLabel}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LgColors.Gold
+                )
+            }
         }
 
         // 2. Sports Edge & Odds Scanner (Two-Way Arbitrage & De-Vig)
@@ -212,7 +219,7 @@ fun SportsCalculatorsSection() {
             )
         }
 
-        // 3. Bankroll & Kelly Sizing (matches Image 1 right pane)
+        // 3. Bankroll & Kelly Sizing
         CyberFrameCard(title = "BANKROLL & KELLY SIZING") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = kellyOdds, onValueChange = { kellyOdds = it }, label = { Text("Odds") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -289,13 +296,14 @@ fun EarnAndRiskCalculatorsSection() {
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Staking & Earn Yields (matches Image 1 middle-bottom ALEO Pool 12.4% / USDT Pool 8.2%)
+        // Staking & Earn Yields with Coin Logos
         CyberFrameCard(title = "STAKING & EARN YIELDS") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 StakingPoolCard(
+                    symbol = "ALEO",
                     poolName = "ALEO POOL",
                     aprText = "12.4%",
                     selected = selectedPool == "ALEO",
@@ -306,6 +314,7 @@ fun EarnAndRiskCalculatorsSection() {
                     modifier = Modifier.weight(1f)
                 )
                 StakingPoolCard(
+                    symbol = "USDT",
                     poolName = "USDT POOL",
                     aprText = "8.2%",
                     selected = selectedPool == "USDT",
@@ -367,6 +376,7 @@ fun EarnAndRiskCalculatorsSection() {
 
 @Composable
 private fun StakingPoolCard(
+    symbol: String,
     poolName: String,
     aprText: String,
     selected: Boolean,
@@ -375,9 +385,9 @@ private fun StakingPoolCard(
 ) {
     Column(
         modifier = modifier
-            .heightIn(min = 84.dp)
+            .heightIn(min = 90.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) LgColors.Turquoise.copy(alpha = 0.14f) else LgColors.ElevatedSlate.copy(alpha = 0.68f))
+            .background(if (selected) LgColors.Turquoise.copy(alpha = 0.16f) else LgColors.ElevatedSlate.copy(alpha = 0.72f))
             .border(
                 width = if (selected) 1.5.dp else 1.dp,
                 color = if (selected) LgColors.Turquoise else LgColors.BorderHairline,
@@ -385,10 +395,20 @@ private fun StakingPoolCard(
             )
             .clickable(onClick = onClick)
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(poolName, style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CoinAvatar(symbol = symbol, size = 24.dp)
+                Text(poolName, style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary, fontWeight = FontWeight.Bold)
+            }
             if (selected) StatusPill("Active", LgColors.Turquoise)
         }
         Text(aprText, style = MaterialTheme.typography.titleLarge, color = LgColors.Gold, fontWeight = FontWeight.Bold)

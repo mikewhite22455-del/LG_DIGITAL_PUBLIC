@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.core.Formatters
 import com.example.domain.models.MarketTicker
+import com.example.ui.theme.LgColors
 import com.example.viewmodel.VaultUiState
 import kotlin.math.roundToInt
 
@@ -97,7 +98,7 @@ fun PortfolioSummaryWidget(
                         listOf(
                             dailyColor.copy(alpha = 0.14f),
                             MaterialTheme.colorScheme.surface,
-                            Color(0xFF0A1D2B)
+                            LgColors.TealAmbient.copy(alpha = 0.85f)
                         )
                     )
                 )
