@@ -2,6 +2,10 @@
 
 Native Android trading desk, quantitative strategy lab, cross-exchange spot arbitrage workspace, and AI trading copilot built with Kotlin, Jetpack Compose, Material 3, Room, and Firebase AI Logic (`gemini-3.8-flash`).
 
+## Android build setup
+
+Use JDK 21 and Gradle 9.3.1. Register the Android application ID `com.aistudio.lgdigital.kxrmqp` with Firebase and place its `google-services.json` in `app/`. For GitHub Actions, set the repository secret `GOOGLE_SERVICES_JSON` to the complete contents of that file. The debug build uses Android's default debug keystore.
+
 ## Features
 - **Live Markets**: CoinGecko & KuCoin spot tickers, market breadth pulse, top movers, searchable coin catalog with quick-action sheets, and CoinDesk RSS market news.
 - **Trade & Bots**: Interactive Compose `Canvas` OHLCV candlestick chart (`15m`, `1h`, `4h`, `1d`) with SMA, EMA, Bollinger Bands, and Supertrend overlays; 11 deterministic technical strategies; paper order ticket; chronological 70/30 backtester; and Adaptive Autopilot guardrails (risk profiles, stop-schedule windows, drawdown locks, higher-timeframe filter).

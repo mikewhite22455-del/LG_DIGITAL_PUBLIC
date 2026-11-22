@@ -17,4 +17,5 @@ app/build/
 .build-outputs/
 .kotlin/
 .env
+app/google-services.json
 *-debug.log
