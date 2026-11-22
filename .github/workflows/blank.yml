@@ -26,11 +26,11 @@ jobs:
       - name: Create google-services.json
         run: |
           mkdir -p app
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          printf '%s' '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
       - name: Decode Release Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -di > app/release.jks
 
       - name: Build Debug APK
         run: gradle assembleDebug
