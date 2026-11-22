@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,10 +103,18 @@ import com.example.domain.models.MarketTicker
 import com.example.domain.models.UiState
 import com.example.ui.components.AssetHistoricalView
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
+import com.example.ui.components.FearGreedGaugeWidget
+import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.HourlyTrendSparkline
+import com.example.ui.components.LiveTelemetryCommandCard
 import com.example.ui.components.MetricTile
 import com.example.ui.components.PortfolioSummaryWidget
+import com.example.ui.components.SocialMediaLinksBar
 import com.example.ui.components.StatusPill
+import com.example.ui.components.circuitTextFieldBackdrop
+import com.example.ui.theme.LgColors
 import com.example.viewmodel.ArbitrageUiState
 import com.example.viewmodel.MarketsUiState
 import com.example.viewmodel.VaultUiState
@@ -130,6 +139,7 @@ fun DashboardScreen(
     vaultState: VaultUiState,
     isWide: Boolean = false,
     onRefreshAll: () -> Unit,
+    onRefreshFearGreed: () -> Unit = onRefreshAll,
     onRefreshNews: () -> Unit,
     onSearchChange: (String) -> Unit,
     onToggleArbMode: (ArbitrageMode) -> Unit,
@@ -143,6 +153,7 @@ fun DashboardScreen(
     onNavigateToMining: () -> Unit,
     onNavigateToTrade: () -> Unit,
     onOpenAllPagesPreview: () -> Unit,
+    onOpenWalkthrough: () -> Unit = onOpenAllPagesPreview,
     onSelectHistoryAsset: (String) -> Unit = {},
     onSelectHistoryWindow: (HistoryWindow) -> Unit = {},
     onRefreshHistory: () -> Unit = {},
@@ -291,6 +302,31 @@ fun DashboardScreen(
                 )
             }
 
+            // 0a. Live-Updating Crypto Fear & Greed Index Gauge (External API + Live Pulse)
+            item {
+                FearGreedGaugeWidget(
+                    fearGreedState = marketsState.fearGreedState,
+                    isRefreshing = marketsState.isRefreshingFearGreed,
+                    onRefresh = onRefreshFearGreed
+                )
+            }
+
+            // 0b. Auto-Running Live Meters, Animated Radar Scanner & Live TradingView Chart
+            item {
+                val loadedTickers = (marketsState.tickersState as? UiState.Success)?.data.orEmpty()
+                LiveTelemetryCommandCard(
+                    selectedSymbol = marketsState.selectedHistorySymbol,
+                    breadth = marketsState.breadth,
+                    tickers = loadedTickers,
+                    arbitrageState = arbitrageState,
+                    onSelectTicker = { ticker ->
+                        onSelectHistoryAsset(ticker.symbol)
+                        selectedCoinSheet = ticker
+                    },
+                    onSelectSymbol = onSelectHistoryAsset
+                )
+            }
+
             // 1. M3 Command Quick-Launch Card
             item {
                 PortfolioHeroM3Card(
@@ -298,9 +334,7 @@ fun DashboardScreen(
                     vaultState = vaultState,
                     onRefreshAll = onRefreshAll,
                     onNavigateToTrade = onNavigateToTrade,
-                    onNavigateToAdvisor = onNavigateToAdvisor,
-                    onNavigateToMining = onNavigateToMining,
-                    onOpenAllPagesPreview = onOpenAllPagesPreview,
+                    onOpenWalkthrough = onOpenWalkthrough,
                     onOpenBacktest = { onOpenBacktest(marketsState.selectedHistorySymbol) }
                 )
             }
@@ -377,18 +411,12 @@ fun DashboardScreen(
 
             // 3. Real-Time Crypto Price Feeds & CoinDesk RSS Wire Section
             item {
-                ElevatedCard(
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+                CyberFrameCard(
+                    title = if (streamMode == DashboardStreamMode.PRICES) "HOME · PRICE FEEDS" else "LIVE MARKET WIRE",
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
@@ -396,21 +424,34 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(
-                                    text = if (streamMode == DashboardStreamMode.PRICES) "Real-Time Price Feeds" else "Live Market Wire",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    text = if (streamMode == DashboardStreamMode.PRICES) "Spot Market Feed" else "CoinDesk Wire",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = LgColors.Turquoise
                                 )
-                                Text(
-                                    text = if (streamMode == DashboardStreamMode.PRICES) {
-                                        "CoinGecko & KuCoin USD spot quotes"
-                                    } else {
-                                        "CoinDesk RSS market headlines"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (streamMode == DashboardStreamMode.PRICES) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        ExchangeLogo("CoinGecko", size = 16.dp)
+                                        ExchangeLogo("KuCoin", size = 16.dp)
+                                        Text(
+                                            text = "CoinGecko & KuCoin USD spot quotes",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "CoinDesk RSS market headlines",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             if (marketsState.lastUpdatedMs > 0L) {
                                 SuggestionChip(
@@ -456,17 +497,18 @@ fun DashboardScreen(
                                 value = marketsState.searchQuery,
                                 onValueChange = onSearchChange,
                                 placeholder = { Text("Filter BTC, ETH, SOL, LINK...") },
-                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search crypto price feeds") },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search crypto price feeds", tint = LgColors.Turquoise) },
                                 singleLine = true,
                                 shape = MaterialTheme.shapes.medium,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                    focusedContainerColor = MaterialTheme.colorScheme.background,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.background
+                                    focusedBorderColor = LgColors.Turquoise,
+                                    unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .circuitTextFieldBackdrop(cornerRadius = 12.dp, drawBorder = false)
                                     .testTag("market_search_input")
                             )
 
@@ -630,6 +672,21 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            // 4. In-App Social Media Links Card
+            item {
+                CyberFrameCard(
+                    title = "CONNECT · SOCIAL MEDIA",
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Follow LG Digital updates, live market alerts, and community channels.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LgColors.InkSecondary
+                    )
+                    SocialMediaLinksBar(compact = false)
+                }
+            }
         }
     }
 }
@@ -640,36 +697,18 @@ private fun PortfolioHeroM3Card(
     vaultState: VaultUiState,
     onRefreshAll: () -> Unit,
     onNavigateToTrade: () -> Unit,
-    onNavigateToAdvisor: () -> Unit,
-    onNavigateToMining: () -> Unit,
-    onOpenAllPagesPreview: () -> Unit,
+    onOpenWalkthrough: () -> Unit,
     onOpenBacktest: () -> Unit
 ) {
-    ElevatedCard(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+    val uriHandler = LocalUriHandler.current
+    CyberFrameCard(
+        title = "HOME",
         modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                            MaterialTheme.colorScheme.surface,
-                            Color(0xFF0A1F29)
-                        )
-                    )
-                )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -692,7 +731,7 @@ private fun PortfolioHeroM3Card(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Autopilot, AI Advisor & Miner",
+                                text = "Digital Walkthrough & Desk Guide",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.SemiBold
@@ -760,37 +799,60 @@ private fun PortfolioHeroM3Card(
                     MetricTile("Strategy", vaultState.account.selectedStrategyId.replace('_', ' ').uppercase(), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
                 }
 
-                // Quick Home Shortcuts Bar using M3 Cards & Artwork
+                // Command Center Digital Walkthrough Feature Card (uses exact walkthrough image + opens guide + website link)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .circuitTextFieldBackdrop(cornerRadius = 12.dp)
+                        .clickable(onClick = onOpenWalkthrough)
+                        .padding(10.dp)
+                        .testTag("command_center_digital_walkthrough_button"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    DashboardShortcutTile(
-                        title = "Advisor",
-                        imageRes = R.drawable.img_user_advisor_robot,
-                        onClick = onNavigateToAdvisor,
+                    Image(
+                        painter = painterResource(id = R.drawable.img_walkthrough_bot),
+                        contentDescription = "Digital Walkthrough interactive guide",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("tour_advisor_card")
+                            .size(58.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.4.dp, LgColors.GoldBright, RoundedCornerShape(10.dp))
                     )
-                    DashboardShortcutTile(
-                        title = "Miner",
-                        imageRes = R.drawable.img_miner_rig,
-                        onClick = onNavigateToMining,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("tour_mining_card")
-                    )
-                    DashboardShortcutTile(
-                        title = "All Pages",
-                        imageRes = R.drawable.img_user_walkthrough_bot,
-                        onClick = onOpenAllPagesPreview,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("open_all_pages_preview_button")
-                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "DIGITAL WALKTHROUGH",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = LgColors.GoldBright,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Tap to explore step-by-step how every module, exchange scanner & universal miner works.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LgColors.InkSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = {
+                            runCatching { uriHandler.openUri("https://lgdigital.ca/walkthrough") }
+                        },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = LgColors.Turquoise.copy(alpha = 0.2f),
+                            contentColor = LgColors.GoldBright
+                        ),
+                        modifier = Modifier.testTag("command_center_walkthrough_web_link")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "Open website Digital Walkthrough"
+                        )
+                    }
                 }
-            }
         }
     }
 }
@@ -804,9 +866,9 @@ private fun DashboardShortcutTile(
 ) {
     OutlinedCard(
         shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+        border = BorderStroke(1.2.dp, LgColors.Gold.copy(alpha = 0.65f)),
         colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            containerColor = LgColors.ElevatedSlate.copy(alpha = 0.72f)
         ),
         modifier = modifier
             .heightIn(min = 56.dp)
@@ -857,16 +919,12 @@ private fun ArbitrageSummaryM3Card(
         vaultState.arbitrageTrades.sumOf { it.worstCaseNetUsd }
     }
 
-    ElevatedCard(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+    CyberFrameCard(
+        title = "ACTIVE ARBITRAGE",
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -1013,12 +1071,26 @@ private fun ArbitrageSummaryM3Card(
                                     CoinAvatar(opp.symbol, size = 34.dp)
                                 },
                                 headlineContent = {
-                                    Text(
-                                        text = "${opp.buyVenue} -> ${opp.sellVenue}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        ExchangeLogo(opp.buyVenue, size = 16.dp)
+                                        Text(
+                                            text = opp.buyVenue,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text("->", style = MaterialTheme.typography.labelSmall, color = LgColors.Turquoise)
+                                        ExchangeLogo(opp.sellVenue, size = 16.dp)
+                                        Text(
+                                            text = opp.sellVenue,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 },
                                 supportingContent = {
                                     Text(
@@ -1049,16 +1121,13 @@ private fun ArbitrageSummaryM3Card(
                 }
             }
 
-            OutlinedButton(
+            GoldMetallicButton(
+                text = "Open Full Arbitrage Scanner",
                 onClick = onOpenArbitrageDesk,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
                     .testTag("dashboard_open_arb_desk_button")
-            ) {
-                Icon(Icons.Filled.GridView, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
-                Text("Open Full Arbitrage Scanner & Venue Wallets")
-            }
+            )
         }
     }
 }
@@ -1073,16 +1142,12 @@ private fun MarketPulseM3Card(
     val topMovers = remember(tickers) {
         tickers.sortedByDescending { kotlin.math.abs(it.change24hPct) }.take(4)
     }
-    ElevatedCard(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+    CyberFrameCard(
+        title = "MARKET PULSE & MOVERS",
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(

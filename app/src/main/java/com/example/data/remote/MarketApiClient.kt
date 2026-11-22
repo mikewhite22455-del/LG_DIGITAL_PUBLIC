@@ -4,7 +4,12 @@ import android.util.Xml
 import com.example.core.CoinAssets
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.ConnectedExchange
 import com.example.domain.models.DexPairInfo
+import com.example.domain.models.ExchangeMarketScanResult
+import com.example.domain.models.ExchangeMarketTicker
+import com.example.domain.models.FearGreedIndexData
+import com.example.domain.models.FearGreedPoint
 import com.example.domain.models.HistoryWindow
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.MiningQuote
@@ -499,6 +504,399 @@ class MarketApiClient {
             }
             if (items.isEmpty()) throw IllegalStateException("No headlines parsed from CoinDesk RSS.")
             items
+        }
+    }
+
+    /**
+     * Fetches the official Crypto Fear & Greed Index from Alternative.me (7-day series),
+     * with a secondary real-API fallback to CoinGecko Global market pulse if unreachable.
+     */
+    suspend fun fetchFearAndGreedIndex(): Result<FearGreedIndexData> = withContext(Dispatchers.IO) {
+        runCatching {
+            try {
+                fetchFearGreedFromAlternativeMe()
+            } catch (_: Exception) {
+                fetchFearGreedFromCoinGeckoGlobal()
+            }
+        }
+    }
+
+    private fun fetchFearGreedFromAlternativeMe(): FearGreedIndexData {
+        val body = fetchString("https://api.alternative.me/fng/?limit=7&format=json")
+        val root = JSONObject(body)
+        val dataArr = root.optJSONArray("data")
+            ?: throw IllegalStateException("Alternative.me FNG returned missing data array")
+        if (dataArr.length() == 0) {
+            throw IllegalStateException("Alternative.me FNG returned empty data")
+        }
+
+        val points = mutableListOf<FearGreedPoint>()
+        var nextUpdateSec: Long? = null
+
+        for (i in 0 until dataArr.length()) {
+            val item = dataArr.getJSONObject(i)
+            val value = item.optString("value").toIntOrNull()?.coerceIn(0, 100) ?: continue
+            val classification = item.optString("value_classification")
+                .ifBlank { classifyFearGreed(value) }
+            val tsSec = item.optString("timestamp").toLongOrNull()
+                ?: (System.currentTimeMillis() / 1000L - i * 86_400L)
+            if (i == 0) {
+                nextUpdateSec = item.optString("time_until_update").toLongOrNull()
+            }
+            points += FearGreedPoint(
+                value = value,
+                classification = classification,
+                timestampSec = tsSec
+            )
+        }
+
+        if (points.isEmpty()) {
+            throw IllegalStateException("Could not parse Fear & Greed values")
+        }
+
+        val today = points.first()
+        val yesterday = points.getOrNull(1)?.value
+        val lastWeek = points.lastOrNull()?.takeIf { points.size >= 3 }?.value
+
+        return FearGreedIndexData(
+            apiValue = today.value,
+            apiClassification = today.classification,
+            liveValue = today.value,
+            liveClassification = today.classification,
+            liveMomentumAdjustment = 0,
+            yesterdayValue = yesterday,
+            lastWeekValue = lastWeek,
+            history7d = points.reversed(),
+            nextUpdateSec = nextUpdateSec,
+            updatedAtMs = System.currentTimeMillis(),
+            source = "Alternative.me FNG API"
+        )
+    }
+
+    private fun fetchFearGreedFromCoinGeckoGlobal(): FearGreedIndexData {
+        val body = fetchString("https://api.coingecko.com/api/v3/global")
+        val data = JSONObject(body).getJSONObject("data")
+        val mcapChange24h = data.optDouble("market_cap_change_percentage_24h_usd", 0.0)
+        val btcDom = data.optJSONObject("market_cap_percentage")?.optDouble("btc", 50.0) ?: 50.0
+        // Market cap momentum + BTC dominance proxy mapped onto 0..100 scale
+        val momentumComponent = (50.0 + mcapChange24h * 6.5).coerceIn(5.0, 95.0)
+        val dominanceComponent = (100.0 - (btcDom - 35.0) * 1.4).coerceIn(15.0, 85.0)
+        val score = (momentumComponent * 0.72 + dominanceComponent * 0.28).toInt().coerceIn(0, 100)
+        val label = classifyFearGreed(score)
+        val nowSec = System.currentTimeMillis() / 1000L
+
+        return FearGreedIndexData(
+            apiValue = score,
+            apiClassification = label,
+            liveValue = score,
+            liveClassification = label,
+            liveMomentumAdjustment = 0,
+            yesterdayValue = null,
+            lastWeekValue = null,
+            history7d = listOf(FearGreedPoint(score, label, nowSec)),
+            nextUpdateSec = null,
+            updatedAtMs = System.currentTimeMillis(),
+            source = "CoinGecko Global API"
+        )
+    }
+
+    /**
+     * Fetches live USD -> CAD foreign exchange rate from public FX APIs
+     * so Adaptive Trader accurately quotes & sizes trades in USD or CAD.
+     */
+    suspend fun fetchUsdToCadRate(): Result<Double> = withContext(Dispatchers.IO) {
+        runCatching {
+            try {
+                val root = JSONObject(fetchString("https://api.frankfurter.app/latest?from=USD&to=CAD"))
+                val cad = root.getJSONObject("rates").getDouble("CAD")
+                if (cad in 0.8..2.5) cad else throw IllegalStateException("Out-of-range CAD FX")
+            } catch (_: Exception) {
+                val root = JSONObject(fetchString("https://open.er-api.com/v6/latest/USD"))
+                val cad = root.getJSONObject("rates").getDouble("CAD")
+                if (cad in 0.8..2.5) cad else 1.38
+            }
+        }
+    }
+
+    /**
+     * Scans EVERY liquid spot market across the selected connected exchange(s)
+     * (Kraken, KuCoin, Coinbase, Bitstamp, or all concurrently) to discover
+     * profit-optimizing coins across the entire connected exchange universe.
+     */
+    suspend fun scanEntireExchangeMarket(
+        exchange: ConnectedExchange,
+        usdToCadRate: Double = 1.38
+    ): Result<ExchangeMarketScanResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val venuesScanned = mutableListOf<String>()
+            val allScanned = mutableListOf<ExchangeMarketTicker>()
+            var totalRawMarkets = 0
+
+            val tasks: List<Pair<String, suspend () -> Pair<Int, List<ExchangeMarketTicker>>>> = when (exchange) {
+                ConnectedExchange.KRAKEN -> listOf("Kraken" to { scanKrakenFullExchange(usdToCadRate) })
+                ConnectedExchange.KUCOIN -> listOf("KuCoin" to { scanKuCoinFullExchange() })
+                ConnectedExchange.BITSTAMP -> listOf("Bitstamp" to { scanBitstampFullExchange() })
+                ConnectedExchange.COINBASE -> listOf("Coinbase" to { scanCoinbaseFullExchange() })
+                ConnectedExchange.ALL_CONNECTED -> listOf(
+                    "Kraken" to { scanKrakenFullExchange(usdToCadRate) },
+                    "KuCoin" to { scanKuCoinFullExchange() },
+                    "Bitstamp" to { scanBitstampFullExchange() }
+                )
+            }
+
+            val results = coroutineScope {
+                tasks.map { (venue, fn) ->
+                    async(Dispatchers.IO) {
+                        venue to runCatching { fn() }.getOrNull()
+                    }
+                }.awaitAll()
+            }
+
+            results.forEach { (venue, pair) ->
+                if (pair != null && pair.second.isNotEmpty()) {
+                    venuesScanned += venue
+                    totalRawMarkets += pair.first
+                    allScanned += pair.second
+                }
+            }
+
+            // Fallback to KuCoin if selected single venue timed out
+            if (allScanned.isEmpty()) {
+                val fallback = scanKuCoinFullExchange()
+                venuesScanned += "KuCoin"
+                totalRawMarkets += fallback.first
+                allScanned += fallback.second
+            }
+
+            // Merge across venues by base coin, picking the highest-volume/tightest venue per coin,
+            // then rank by a momentum + intraday volatility + liquidity discovery score
+            val bestPerCoin = allScanned
+                .groupBy { it.symbol }
+                .values
+                .mapNotNull { list -> list.maxByOrNull { it.volume24hUsd } }
+                .filter { it.priceUsd > 0.0 && it.volume24hUsd >= 150_000.0 }
+                .sortedByDescending { t ->
+                    val rangePct = if (t.low24h > 0.0) ((t.high24h - t.low24h) / t.low24h) * 100.0 else 0.0
+                    val liqBonus = kotlin.math.ln(t.volume24hUsd.coerceAtLeast(1.0)) * 2.2
+                    val momentumScore = t.change24hPct.coerceIn(-15.0, 35.0) * 1.4
+                    val rangeBonus = rangePct.coerceIn(0.0, 28.0) * 0.9
+                    val spreadPenalty = (t.spreadBps * 0.08).coerceAtMost(15.0)
+                    momentumScore + rangeBonus + liqBonus - spreadPenalty
+                }
+
+            ExchangeMarketScanResult(
+                exchange = exchange,
+                totalMarketsScanned = maxOf(totalRawMarkets, bestPerCoin.size),
+                venuesScanned = venuesScanned.ifEmpty { listOf(exchange.shortLabel) },
+                candidates = bestPerCoin.take(24),
+                scannedAtMs = System.currentTimeMillis()
+            )
+        }
+    }
+
+    private fun scanKuCoinFullExchange(): Pair<Int, List<ExchangeMarketTicker>> {
+        val body = fetchString("https://api.kucoin.com/api/v1/market/allTickers")
+        val tickerArr = JSONObject(body).getJSONObject("data").getJSONArray("ticker")
+        val excluded = setOf("USDT", "USDC", "DAI", "TUSD", "BUSD", "FDUSD", "USDE", "EUR", "GBP", "PYUSD", "USD1", "PAXG")
+        val out = mutableListOf<ExchangeMarketTicker>()
+        val totalCount = tickerArr.length()
+
+        for (i in 0 until totalCount) {
+            val obj = tickerArr.getJSONObject(i)
+            val pair = obj.optString("symbol")
+            if (!pair.endsWith("-USDT") && !pair.endsWith("-USD")) continue
+            val base = pair.substringBefore("-").uppercase()
+            if (base.isBlank() || base in excluded || base.endsWith("3L") || base.endsWith("3S") || base.endsWith("UP") || base.endsWith("DOWN")) continue
+
+            val price = obj.optString("last", "0").toDoubleOrNull() ?: 0.0
+            val volUsd = obj.optString("volValue", "0").toDoubleOrNull() ?: 0.0
+            if (price <= 0.0 || volUsd < 200_000.0) continue
+
+            val changePct = (obj.optString("changeRate", "0").toDoubleOrNull() ?: 0.0) * 100.0
+            val high = obj.optString("high", "0").toDoubleOrNull() ?: price
+            val low = obj.optString("low", "0").toDoubleOrNull() ?: price
+            val buy = obj.optString("buy", "0").toDoubleOrNull() ?: price
+            val sell = obj.optString("sell", "0").toDoubleOrNull() ?: price
+            val spreadBps = if (buy > 0.0 && sell >= buy) ((sell - buy) / buy) * 10_000.0 else 15.0
+
+            out += ExchangeMarketTicker(
+                symbol = base,
+                quoteCurrency = pair.substringAfter("-"),
+                exchangeName = "KuCoin",
+                pairLabel = pair,
+                priceUsd = price,
+                change24hPct = changePct,
+                volume24hUsd = volUsd,
+                high24h = high,
+                low24h = low,
+                spreadBps = spreadBps
+            )
+        }
+        return totalCount to out
+    }
+
+    private fun scanKrakenFullExchange(usdToCadRate: Double): Pair<Int, List<ExchangeMarketTicker>> {
+        val root = JSONObject(fetchString("https://api.kraken.com/0/public/Ticker"))
+        val res = root.getJSONObject("result")
+        val excluded = setOf("USDT", "USDC", "DAI", "USD", "CAD", "EUR", "GBP", "ZUSD", "ZCAD", "ZEUR", "PYUSD", "USDG")
+        val out = mutableListOf<ExchangeMarketTicker>()
+        val keys = res.keys().asSequence().toList()
+
+        keys.forEach { rawPair ->
+            val isUsd = rawPair.endsWith("ZUSD") || rawPair.endsWith("USD")
+            val isCad = rawPair.endsWith("ZCAD") || rawPair.endsWith("CAD")
+            if (!isUsd && !isCad) return@forEach
+
+            val quote = if (isCad) "CAD" else "USD"
+            val rawBase = rawPair
+                .removeSuffix("ZUSD")
+                .removeSuffix("ZCAD")
+                .removeSuffix("USD")
+                .removeSuffix("CAD")
+            val base = normalizeKrakenBase(rawBase)
+            if (base.isBlank() || base in excluded || base.length > 8) return@forEach
+
+            val obj = res.optJSONObject(rawPair) ?: return@forEach
+            val lastQuote = obj.optJSONArray("c")?.optString(0)?.toDoubleOrNull() ?: 0.0
+            val openQuote = obj.optString("o", "0").toDoubleOrNull() ?: 0.0
+            val volBase = obj.optJSONArray("v")?.optString(1)?.toDoubleOrNull() ?: 0.0
+            val highQuote = obj.optJSONArray("h")?.optString(1)?.toDoubleOrNull() ?: lastQuote
+            val lowQuote = obj.optJSONArray("l")?.optString(1)?.toDoubleOrNull() ?: lastQuote
+            val askQuote = obj.optJSONArray("a")?.optString(0)?.toDoubleOrNull() ?: lastQuote
+            val bidQuote = obj.optJSONArray("b")?.optString(0)?.toDoubleOrNull() ?: lastQuote
+
+            val fxDiv = if (isCad && usdToCadRate > 0.5) usdToCadRate else 1.0
+            val priceUsd = lastQuote / fxDiv
+            val volUsd = volBase * priceUsd
+            if (priceUsd <= 0.0 || volUsd < 100_000.0) return@forEach
+
+            val changePct = if (openQuote > 0.0) ((lastQuote - openQuote) / openQuote) * 100.0 else 0.0
+            val spreadBps = if (bidQuote > 0.0 && askQuote >= bidQuote) ((askQuote - bidQuote) / bidQuote) * 10_000.0 else 18.0
+
+            out += ExchangeMarketTicker(
+                symbol = base,
+                quoteCurrency = quote,
+                exchangeName = "Kraken",
+                pairLabel = "$base/$quote",
+                priceUsd = priceUsd,
+                change24hPct = changePct,
+                volume24hUsd = volUsd,
+                high24h = highQuote / fxDiv,
+                low24h = lowQuote / fxDiv,
+                spreadBps = spreadBps
+            )
+        }
+        return keys.size to out
+    }
+
+    private fun scanBitstampFullExchange(): Pair<Int, List<ExchangeMarketTicker>> {
+        val arr = JSONArray(fetchString("https://www.bitstamp.net/api/v2/ticker/"))
+        val excluded = setOf("USDT", "USDC", "EUR", "GBP", "DAI", "PYUSD", "RLUSD")
+        val out = mutableListOf<ExchangeMarketTicker>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val pair = obj.optString("pair")
+            if (!pair.endsWith("/USD")) continue
+            val base = pair.substringBefore("/").uppercase()
+            if (base.isBlank() || base in excluded) continue
+
+            val price = obj.optString("last", "0").toDoubleOrNull() ?: 0.0
+            val volBase = obj.optString("volume", "0").toDoubleOrNull() ?: 0.0
+            val volUsd = volBase * price
+            if (price <= 0.0 || volUsd < 100_000.0) continue
+
+            val changePct = obj.optString("percent_change_24", "0").toDoubleOrNull() ?: 0.0
+            val high = obj.optString("high", "0").toDoubleOrNull() ?: price
+            val low = obj.optString("low", "0").toDoubleOrNull() ?: price
+            val bid = obj.optString("bid", "0").toDoubleOrNull() ?: price
+            val ask = obj.optString("ask", "0").toDoubleOrNull() ?: price
+            val spreadBps = if (bid > 0.0 && ask >= bid) ((ask - bid) / bid) * 10_000.0 else 18.0
+
+            out += ExchangeMarketTicker(
+                symbol = base,
+                quoteCurrency = "USD",
+                exchangeName = "Bitstamp",
+                pairLabel = pair,
+                priceUsd = price,
+                change24hPct = changePct,
+                volume24hUsd = volUsd,
+                high24h = high,
+                low24h = low,
+                spreadBps = spreadBps
+            )
+        }
+        return arr.length() to out
+    }
+
+    private suspend fun scanCoinbaseFullExchange(): Pair<Int, List<ExchangeMarketTicker>> = coroutineScope {
+        val productsArr = JSONArray(fetchString("https://api.exchange.coinbase.com/products"))
+        val excluded = setOf("USDT", "USDC", "DAI", "PYUSD", "EURC", "GUSD", "PAX")
+        val usdProducts = mutableListOf<Pair<String, String>>()
+        for (i in 0 until productsArr.length()) {
+            val obj = productsArr.getJSONObject(i)
+            val quote = obj.optString("quote_currency")
+            val base = obj.optString("base_currency").uppercase()
+            val status = obj.optString("status")
+            if (quote == "USD" && status == "online" && base !in excluded && !obj.optBoolean("trading_disabled", false)) {
+                usdProducts += base to obj.optString("id")
+            }
+        }
+        val prioritized = usdProducts.sortedBy { (base, _) ->
+            if (CoinAssets.find(base) != null) 0 else 1
+        }.take(24)
+
+        val tickers = prioritized.map { (base, id) ->
+            async(Dispatchers.IO) {
+                runCatching {
+                    val st = JSONObject(fetchString("https://api.exchange.coinbase.com/products/$id/stats"))
+                    val last = st.optString("last", "0").toDoubleOrNull() ?: 0.0
+                    val open = st.optString("open", "0").toDoubleOrNull() ?: 0.0
+                    val volBase = st.optString("volume", "0").toDoubleOrNull() ?: 0.0
+                    val high = st.optString("high", "0").toDoubleOrNull() ?: last
+                    val low = st.optString("low", "0").toDoubleOrNull() ?: last
+                    val volUsd = volBase * last
+                    if (last <= 0.0 || volUsd < 100_000.0) return@runCatching null
+                    val chg = if (open > 0.0) ((last - open) / open) * 100.0 else 0.0
+                    ExchangeMarketTicker(
+                        symbol = base,
+                        quoteCurrency = "USD",
+                        exchangeName = "Coinbase",
+                        pairLabel = id,
+                        priceUsd = last,
+                        change24hPct = chg,
+                        volume24hUsd = volUsd,
+                        high24h = high,
+                        low24h = low,
+                        spreadBps = 12.0
+                    )
+                }.getOrNull()
+            }
+        }.awaitAll().filterNotNull()
+
+        usdProducts.size to tickers
+    }
+
+    private fun normalizeKrakenBase(rawBase: String): String = when (rawBase.uppercase()) {
+        "XXBT", "XBT" -> "BTC"
+        "XETH" -> "ETH"
+        "XXRP" -> "XRP"
+        "XLTC" -> "LTC"
+        "XXLM" -> "XLM"
+        "XDG", "XXDG" -> "DOGE"
+        "XZEC" -> "ZEC"
+        "XETC" -> "ETC"
+        "XXMR" -> "XMR"
+        "XREP" -> "REP"
+        else -> rawBase.uppercase()
+    }
+
+    companion object {
+        fun classifyFearGreed(score: Int): String = when {
+            score < 25 -> "Extreme Fear"
+            score < 45 -> "Fear"
+            score <= 55 -> "Neutral"
+            score < 75 -> "Greed"
+            else -> "Extreme Greed"
         }
     }
 }

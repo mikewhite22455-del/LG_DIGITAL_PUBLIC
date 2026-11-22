@@ -43,7 +43,9 @@ import com.example.core.Formatters
 import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.MetricTile
@@ -76,10 +78,14 @@ fun ArbitrageScreen(
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    CoinAvatar(opp.symbol, size = 28.dp)
-                    Text("${opp.buyVenue} -> ${opp.sellVenue} (${opp.symbol})", style = MaterialTheme.typography.titleLarge, color = LgColors.Gold)
+                    CoinAvatar(opp.symbol, size = 24.dp)
+                    ExchangeLogo(opp.buyVenue, size = 20.dp)
+                    Text(opp.buyVenue, style = MaterialTheme.typography.titleMedium, color = LgColors.Gold)
+                    Text("->", style = MaterialTheme.typography.titleMedium, color = LgColors.Turquoise)
+                    ExchangeLogo(opp.sellVenue, size = 20.dp)
+                    Text(opp.sellVenue, style = MaterialTheme.typography.titleMedium, color = LgColors.Gold)
                 }
             },
             text = {
@@ -189,16 +195,13 @@ fun ArbitrageScreen(
                     }
                 }
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(arbCoins) { coin ->
-                        FilterChip(
-                            selected = coin == state.symbol,
-                            onClick = { onUpdateParams(coin, null, null, null, null) },
-                            leadingIcon = { CoinAvatar(coin, size = 18.dp) },
-                            label = { Text(coin) }
-                        )
-                    }
-                }
+                CoinDropdownSelector(
+                    selectedSymbol = state.symbol,
+                    symbols = arbCoins,
+                    onSelectSymbol = { coin -> onUpdateParams(coin, null, null, null, null) },
+                    label = "Arbitrage Coin",
+                    testTag = "arb_coin_dropdown"
+                )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(100.0, 250.0, 500.0, 1000.0).forEach { sz ->
@@ -279,10 +282,13 @@ fun ArbitrageScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CoinAvatar(opp.symbol, size = 28.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            CoinAvatar(opp.symbol, size = 26.dp)
+                            ExchangeLogo(opp.buyVenue, size = 18.dp)
+                            Text(opp.buyVenue, style = MaterialTheme.typography.titleSmall)
                             Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = null, tint = LgColors.Gold)
-                            Text("${opp.buyVenue} -> ${opp.sellVenue}", style = MaterialTheme.typography.titleMedium)
+                            ExchangeLogo(opp.sellVenue, size = 18.dp)
+                            Text(opp.sellVenue, style = MaterialTheme.typography.titleSmall)
                         }
                         if (opp.qualified) {
                             Icon(Icons.Filled.CheckCircle, contentDescription = "Qualified", tint = LgColors.Turquoise)
@@ -350,9 +356,16 @@ fun ArbitrageScreen(
                         .firstOrNull { it.venue == item.venue && it.asset == state.symbol }?.balance ?: 0.0
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(item.venue, style = MaterialTheme.typography.titleMedium)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ExchangeLogo(item.venue, size = 22.dp)
+                            Text(item.venue, style = MaterialTheme.typography.titleMedium)
+                        }
                         Text(
                             text = "${Formatters.formatUsd(item.balance)} · ${Formatters.formatQty(coinBal)} ${state.symbol}",
                             style = MaterialTheme.typography.labelLarge,
@@ -383,10 +396,17 @@ fun ArbitrageScreen(
                         ) {
                             CoinAvatar(tr.symbol, size = 28.dp)
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "${tr.symbol}: ${tr.buyVenue} -> ${tr.sellVenue}",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text("${tr.symbol}:", style = MaterialTheme.typography.titleSmall, color = LgColors.GoldBright)
+                                    ExchangeLogo(tr.buyVenue, size = 16.dp)
+                                    Text(tr.buyVenue, style = MaterialTheme.typography.titleSmall)
+                                    Text("->", style = MaterialTheme.typography.labelSmall, color = LgColors.Turquoise)
+                                    ExchangeLogo(tr.sellVenue, size = 16.dp)
+                                    Text(tr.sellVenue, style = MaterialTheme.typography.titleSmall)
+                                }
                                 Text(
                                     text = "$${"%.0f".format(tr.notionalUsd)} · ${Formatters.formatBps(tr.grossSpreadBps)} · ${Formatters.formatTimeShort(tr.timestampMs)}",
                                     style = MaterialTheme.typography.labelSmall,

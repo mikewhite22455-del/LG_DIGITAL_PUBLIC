@@ -180,7 +180,7 @@ private fun PreviewLabsMining() {
             onSelectTool = {},
             state = LabsUiState(
                 miningQuotes = UiState.Success(
-                    listOf(MiningQuote("ALEO", "Aleo", "zkSNARK", 2.45, "720 MH/s", "1300W", 1.25, 18.4))
+                    listOf(MiningQuote("BTC", "Bitcoin", "SHA-256", 86500.0, "740 EH/s", "3250W", 3.125, 14.8))
                 )
             ),
             arbitrageState = ArbitrageUiState(),

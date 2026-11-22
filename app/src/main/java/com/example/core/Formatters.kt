@@ -26,6 +26,34 @@ object Formatters {
         }
     }
 
+    fun formatFiat(
+        valueUsd: Double,
+        currency: com.example.domain.models.BaseFiatCurrency,
+        usdToCadRate: Double = 1.38
+    ): String {
+        val converted = if (currency == com.example.domain.models.BaseFiatCurrency.CAD) {
+            valueUsd * usdToCadRate
+        } else {
+            valueUsd
+        }
+        val prefix = currency.symbolPrefix
+        val absVal = abs(converted)
+        val sign = if (converted < 0) "-" else ""
+        return when {
+            absVal == 0.0 -> "${prefix}0.00"
+            absVal < 0.001 -> "$sign$prefix" + String.format(Locale.US, "%.7f", absVal)
+            absVal < 1.0 -> "$sign$prefix" + String.format(Locale.US, "%.4f", absVal)
+            absVal >= 1000.0 -> {
+                val nf = NumberFormat.getNumberInstance(Locale.US).apply {
+                    minimumFractionDigits = 2
+                    maximumFractionDigits = 2
+                }
+                "$sign$prefix${nf.format(absVal)}"
+            }
+            else -> "$sign$prefix" + String.format(Locale.US, "%.2f", absVal)
+        }
+    }
+
     fun formatCompactUsd(value: Double): String {
         val absVal = abs(value)
         val sign = if (value < 0) "-" else ""

@@ -127,9 +127,9 @@ private val previewPages = listOf(
         id = PreviewDestination.TRADE,
         badge = "PAGE 2 / 9",
         title = "Trade · Adaptive Trader",
-        subtitle = "Live Paper Budget, Risk Level pills, Auto Stop DD, Candlestick Chart & 11 Strategies",
+        subtitle = "Live Paper Budget, Risk Level pills, Auto Stop DD, Candlestick Chart & Quant Strategies",
         icon = Icons.Filled.CandlestickChart,
-        heroDrawable = R.drawable.img_hero_banner
+        heroDrawable = R.drawable.img_trading_banner
     ),
     PagePreviewDescriptor(
         id = PreviewDestination.ADVISOR,
@@ -137,7 +137,7 @@ private val previewPages = listOf(
         title = "Advisor · AI Terminal",
         subtitle = "Streaming Trading Advisor chat, Strategy Presets, Risk Guards & Sentiment Arc Gauges",
         icon = Icons.Filled.AutoAwesome,
-        heroDrawable = R.drawable.img_user_advisor_robot
+        heroDrawable = R.drawable.img_advisor_robot
     ),
     PagePreviewDescriptor(
         id = PreviewDestination.LABS_ARBITRAGE,
@@ -150,21 +150,21 @@ private val previewPages = listOf(
         id = PreviewDestination.LABS_SPORTS,
         badge = "PAGE 5 / 9",
         title = "Labs · Sports Edge",
-        subtitle = "6 Sports League Logos, Two-Way Arb & De-Vig, Kelly Sizing & Poisson Matrix",
+        subtitle = "7 Sports Leagues (incl. Boxing), Two-Way Arb & De-Vig, Kelly Sizing & Poisson Matrix",
         icon = Icons.Filled.SportsScore
     ),
     PagePreviewDescriptor(
         id = PreviewDestination.LABS_EARN_RISK,
         badge = "PAGE 6 / 9",
         title = "Labs · Earn & Risk",
-        subtitle = "ALEO 12.4% & USDT 8.2% Staking Pools, Position Risk Sizer & 50/50 LP Impermanent Loss",
+        subtitle = "Multi-Coin Staking Pools (SOL, ETH, BTC, USDT), Position Risk Sizer & 50/50 LP Impermanent Loss",
         icon = Icons.Filled.Savings
     ),
     PagePreviewDescriptor(
         id = PreviewDestination.LABS_MINING,
         badge = "PAGE 7 / 9",
-        title = "Labs · Miner",
-        subtitle = "Miner Hardware Status (720 MH/s · 1300W) & live CoinSpectrum PoW feed",
+        title = "Labs · Universal Miner",
+        subtitle = "Any ASIC / GPU Multi-Algo PoW Monitor & live CoinSpectrum quotes for all mineable coins",
         icon = Icons.Filled.Memory,
         heroDrawable = R.drawable.img_miner_rig
     ),
@@ -181,7 +181,7 @@ private val previewPages = listOf(
         title = "Support & Walkthrough",
         subtitle = "3-card Contact, Robot Walkthrough & Get Help AI Diagnostics",
         icon = Icons.Filled.SupportAgent,
-        heroDrawable = R.drawable.img_user_walkthrough_bot
+        heroDrawable = R.drawable.img_walkthrough_bot
     )
 )
 

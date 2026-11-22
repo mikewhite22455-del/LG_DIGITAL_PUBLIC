@@ -68,6 +68,7 @@ import com.example.domain.models.MarketTicker
 import com.example.domain.models.UiState
 import com.example.ui.components.CoinAvatar
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.HourlyTrendSparkline
@@ -242,7 +243,7 @@ fun MarketsScreen(
                     VisualTourTile(
                         title = "Advisor",
                         subtitle = "AI Terminal",
-                        imageRes = R.drawable.img_user_advisor_robot,
+                        imageRes = R.drawable.img_advisor_robot,
                         accent = LgColors.CyanGlow,
                         onClick = onNavigateToAdvisor,
                         modifier = Modifier
@@ -629,11 +630,21 @@ private fun MarketBreadthCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "CoinGecko & KuCoin Spot Pulse",
-                style = MaterialTheme.typography.bodyMedium,
-                color = LgColors.InkSecondary
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                ExchangeLogo("CoinGecko", size = 18.dp)
+                ExchangeLogo("KuCoin", size = 18.dp)
+                Text(
+                    text = "CoinGecko & KuCoin Spot Pulse",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LgColors.InkSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             StatusPill(
                 text = "${breadth.advancing}/${breadth.totalAssets} UP",
                 color = if (breadth.advancing >= breadth.declining) LgColors.Turquoise else LgColors.Crimson

@@ -82,87 +82,62 @@ fun PortfolioSummaryWidget(
 
     val priceMap = remember(tickers) { tickers.associateBy { it.symbol } }
 
-    ElevatedCard(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 5.dp),
+    CyberFrameCard(
+        title = "PORTFOLIO SUMMARY",
         modifier = modifier
             .fillMaxWidth()
             .testTag("portfolio_summary_widget")
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            dailyColor.copy(alpha = 0.14f),
-                            MaterialTheme.colorScheme.surface,
-                            LgColors.TealAmbient.copy(alpha = 0.85f)
-                        )
-                    )
-                )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            // Top Status & Refresh Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Top Header Bar
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = LgColors.ElevatedSlate,
+                        border = BorderStroke(1.dp, LgColors.Gold.copy(alpha = 0.55f))
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AccountBalanceWallet,
-                                contentDescription = "Portfolio Summary",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .padding(7.dp)
-                                    .size(18.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "PORTFOLIO SUMMARY",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Live valuation & 24h performance",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Filled.AccountBalanceWallet,
+                            contentDescription = "Portfolio Summary",
+                            tint = LgColors.Gold,
+                            modifier = Modifier
+                                .padding(7.dp)
+                                .size(18.dp)
+                        )
                     }
+                    Text(
+                        text = "Live valuation & 24h performance",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LgColors.InkSecondary
+                    )
+                }
 
-                    FilledTonalIconButton(
-                        onClick = onRefresh,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.testTag("portfolio_summary_refresh_button")
-                    ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh portfolio valuation")
-                        }
+                FilledTonalIconButton(
+                    onClick = onRefresh,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = LgColors.ElevatedSlate,
+                        contentColor = LgColors.Turquoise
+                    ),
+                    modifier = Modifier.testTag("portfolio_summary_refresh_button")
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LgColors.Turquoise)
+                    } else {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh portfolio valuation")
                     }
                 }
+            }
 
                 // Primary KPI Row: Total Portfolio Value + Daily P&L Highlight Card
                 Row(
@@ -418,4 +393,3 @@ fun PortfolioSummaryWidget(
             }
         }
     }
-}

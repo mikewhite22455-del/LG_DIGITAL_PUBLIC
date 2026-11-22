@@ -31,6 +31,26 @@ data class MarketBreadth(
     val topLoser: MarketTicker?
 )
 
+data class FearGreedPoint(
+    val value: Int,
+    val classification: String,
+    val timestampSec: Long
+)
+
+data class FearGreedIndexData(
+    val apiValue: Int,
+    val apiClassification: String,
+    val liveValue: Int,
+    val liveClassification: String,
+    val liveMomentumAdjustment: Int,
+    val yesterdayValue: Int?,
+    val lastWeekValue: Int?,
+    val history7d: List<FearGreedPoint>,
+    val nextUpdateSec: Long?,
+    val updatedAtMs: Long,
+    val source: String
+)
+
 data class Candle(
     val timestampSec: Long,
     val open: Double,
@@ -227,6 +247,65 @@ enum class RiskProfile(
     MEDIUM("MEDIUM", 350.0, 1200.0, 4.0, "Balanced adaptive momentum allocation"),
     HIGH("HIGH", 750.0, 3000.0, 6.5, "Aggressive trend & breakout capture")
 }
+
+enum class BaseFiatCurrency(
+    val code: String,
+    val symbolPrefix: String,
+    val displayLabel: String
+) {
+    USD("USD", "$", "USD ($)"),
+    CAD("CAD", "CA$", "CAD (CA$)")
+}
+
+enum class ConnectedExchange(
+    val id: String,
+    val displayName: String,
+    val shortLabel: String
+) {
+    ALL_CONNECTED("all", "All Connected Exchanges", "ALL"),
+    KRAKEN("kraken", "Kraken Spot", "Kraken"),
+    KUCOIN("kucoin", "KuCoin Spot", "KuCoin"),
+    COINBASE("coinbase", "Coinbase Spot", "Coinbase"),
+    BITSTAMP("bitstamp", "Bitstamp Spot", "Bitstamp")
+}
+
+data class ExchangeMarketTicker(
+    val symbol: String,
+    val quoteCurrency: String,
+    val exchangeName: String,
+    val pairLabel: String,
+    val priceUsd: Double,
+    val change24hPct: Double,
+    val volume24hUsd: Double,
+    val high24h: Double,
+    val low24h: Double,
+    val spreadBps: Double
+)
+
+data class ExchangeMarketScanResult(
+    val exchange: ConnectedExchange,
+    val totalMarketsScanned: Int,
+    val venuesScanned: List<String>,
+    val candidates: List<ExchangeMarketTicker>,
+    val scannedAtMs: Long
+)
+
+data class AdaptiveOpportunity(
+    val symbol: String,
+    val exchangeName: String,
+    val pairLabel: String,
+    val priceUsd: Double,
+    val change24hPct: Double,
+    val volume24hUsd: Double,
+    val recommendedStrategy: StrategyType,
+    val signalAction: SignalAction,
+    val signalConfidence: Double,
+    val backtestReturnPct: Double,
+    val winRatePct: Double,
+    val maxDrawdownPct: Double,
+    val profitScore: Double,
+    val reason: String
+)
 
 data class NewsItem(
     val title: String,

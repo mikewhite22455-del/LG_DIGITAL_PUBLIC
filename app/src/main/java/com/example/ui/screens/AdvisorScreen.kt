@@ -29,6 +29,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,14 +47,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.example.R
+import com.example.core.CoinAssets
 import com.example.core.Formatters
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.SentimentArcGauges
 import com.example.ui.components.StatusPill
+import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
 import com.example.viewmodel.AdvisorUiState
 import com.example.viewmodel.MarketsUiState
@@ -123,19 +128,25 @@ fun AdvisorScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.img_user_advisor_robot),
+                        painter = painterResource(id = R.drawable.img_advisor_robot),
                         contentDescription = "Trading Advisor",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(92.dp)
+                            .size(96.dp)
                             .clip(CircleShape)
-                            .border(2.dp, LgColors.Gold.copy(alpha = 0.78f), CircleShape)
+                            .border(2.2.dp, LgColors.Gold.copy(alpha = 0.85f), CircleShape)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CoinAvatar(tradeState.symbol, size = 24.dp)
                         StatusPill("${tradeState.symbol} ${tradeState.timeframe.label}", LgColors.Turquoise)
                         StatusPill(tradeState.strategy.title, LgColors.Gold)
                     }
+                    CoinDropdownSelector(
+                        selectedSymbol = tradeState.symbol,
+                        symbols = CoinAssets.catalog.map { it.symbol },
+                        onSelectSymbol = onSelectCoin,
+                        label = "Active Advisor Coin",
+                        testTag = "advisor_coin_dropdown"
+                    )
                 }
 
                 // Conversation Thread
@@ -217,8 +228,15 @@ fun AdvisorScreen(
                         onValueChange = { promptInput = it },
                         placeholder = { Text("Type a question for Quant Copilot...") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LgColors.Turquoise,
+                            unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        ),
                         modifier = Modifier
                             .weight(1f)
+                            .circuitTextFieldBackdrop(drawBorder = false)
                             .testTag("advisor_prompt_input")
                     )
                     Button(
@@ -342,8 +360,15 @@ private fun StrategyDiagnosticsCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Feed: Kraken / KuCoin Spot", style = MaterialTheme.typography.labelMedium, color = LgColors.Turquoise)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ExchangeLogo("Kraken", size = 18.dp)
+                    ExchangeLogo("KuCoin", size = 18.dp)
+                    Text("Feed: Kraken / KuCoin Spot", style = MaterialTheme.typography.labelMedium, color = LgColors.Turquoise)
+                }
                 Text(
                     text = "Signal: ${tradeState.liveSignal?.action?.name ?: "LOADING"} · Backtest ${tradeState.backtestResult?.let { Formatters.formatPct(it.totalReturnPct) } ?: "--"}",
                     style = MaterialTheme.typography.labelSmall,

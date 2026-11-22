@@ -11,14 +11,18 @@ import com.example.data.local.ResearchWatchlistEntity
 import com.example.data.local.TradeLogEntity
 import com.example.data.local.WatchWalletEntity
 import com.example.data.remote.AdvisorMessage
+import com.example.domain.models.AdaptiveOpportunity
 import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
 import com.example.domain.models.BacktestResult
+import com.example.domain.models.BaseFiatCurrency
 import com.example.domain.models.BreakoutCandidate
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.ConnectedExchange
 import com.example.domain.models.DexPairInfo
+import com.example.domain.models.FearGreedIndexData
 import com.example.domain.models.HistoryWindow
 import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.IndicatorBacktestResult
@@ -41,7 +45,9 @@ data class MarketsUiState(
     val lastUpdatedMs: Long = 0L,
     val selectedHistorySymbol: String = "BTC",
     val historyWindow: HistoryWindow = HistoryWindow.H24,
-    val historyState: UiState<List<PriceHistoryPoint>> = UiState.Loading
+    val historyState: UiState<List<PriceHistoryPoint>> = UiState.Loading,
+    val fearGreedState: UiState<FearGreedIndexData> = UiState.Loading,
+    val isRefreshingFearGreed: Boolean = false
 )
 
 data class TradeUiState(
@@ -56,7 +62,16 @@ data class TradeUiState(
     val indicatorBacktestResult: IndicatorBacktestResult? = null,
     val feeBps: Double = 10.0,
     val slippageBps: Double = 5.0,
-    val statusBanner: String? = null
+    val statusBanner: String? = null,
+    val baseCurrency: BaseFiatCurrency = BaseFiatCurrency.USD,
+    val usdToCadRate: Double = 1.38,
+    val connectedExchange: ConnectedExchange = ConnectedExchange.ALL_CONNECTED,
+    val isScanningExchange: Boolean = false,
+    val totalExchangeMarketsScanned: Int = 0,
+    val venuesScannedLabel: String = "Kraken · KuCoin · Bitstamp",
+    val adaptiveOpportunities: List<AdaptiveOpportunity> = emptyList(),
+    val exchangeScanSummary: String? = null,
+    val lastExchangeScanMs: Long = 0L
 )
 
 data class ArbitrageUiState(

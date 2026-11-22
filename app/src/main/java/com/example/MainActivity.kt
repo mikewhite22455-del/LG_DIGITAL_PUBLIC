@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Analytics
@@ -39,12 +40,14 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsScore
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -103,6 +106,8 @@ import com.example.core.BiometricCapability
 import com.example.core.Formatters
 import com.example.core.configureAppCheck
 import com.example.domain.models.IndicatorBacktestConfig
+import com.example.ui.components.FloatingAiChatBoxSheet
+import com.example.ui.components.FloatingAiChatFab
 import com.example.ui.components.LgCircuitBackground
 import com.example.ui.components.StatusPill
 import com.example.ui.screens.AdvisorScreen
@@ -116,9 +121,18 @@ import com.example.ui.screens.PreviewDestination
 import com.example.ui.screens.TradeScreen
 import com.example.ui.screens.TradeSubWorkspace
 import com.example.ui.screens.VaultScreen
+import com.example.ui.screens.MemberSession
+import com.example.ui.screens.MemberSessionPrefs
+import com.example.ui.screens.MembershipBillingPrefs
+import com.example.ui.screens.MembershipBillingScreen
+import com.example.ui.screens.MembershipTier
+import com.example.ui.screens.ThemePreviewGalleryScreen
+import com.example.ui.screens.WelcomeSignInScreen
+import com.example.ui.theme.AppThemePrefs
 import com.example.ui.theme.DropdownTabTextStyle
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.LgDigitalTheme
+import com.example.ui.theme.LgThemeState
 import com.example.ui.theme.TabLabelTextStyle
 import com.example.viewmodel.MainViewModel
 import kotlinx.serialization.Serializable
@@ -154,6 +168,9 @@ class MainActivity : FragmentActivity() {
         // Mandatory Step 1: Configure Firebase App Check with launch intent before UI or ViewModels
         configureAppCheck(this, intent)
 
+        // Load user-selected color scheme before rendering UI
+        LgThemeState.activeTheme = AppThemePrefs.load(this)
+
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
@@ -161,7 +178,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val widthSizeClass = calculateWindowSizeClass(this).widthSizeClass
-            LgDigitalTheme {
+            LgDigitalTheme(theme = LgThemeState.activeTheme) {
                 LgDigitalAppShell(
                     widthSizeClass = widthSizeClass,
                     activity = this@MainActivity
@@ -215,6 +232,15 @@ fun LgDigitalAppShell(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    var memberSession by remember { mutableStateOf(MemberSessionPrefs.load(context)) }
+    var membershipProfile by remember { mutableStateOf(MembershipBillingPrefs.load(context)) }
+    var showWelcomeFlow by remember { mutableStateOf(true) }
+    var welcomeStartOnSignIn by remember { mutableStateOf(false) }
+    var showMembershipScreen by remember { mutableStateOf(false) }
+    var showThemeGallery by remember { mutableStateOf(false) }
+
+    val tradeState by viewModel.tradeState.collectAsStateWithLifecycle()
+
     if (biometricLockEnabled && !isDashboardUnlocked) {
         BiometricLockScreen(
             activity = activity,
@@ -234,12 +260,42 @@ fun LgDigitalAppShell(
         return
     }
 
+    if (showMembershipScreen) {
+        MembershipBillingScreen(
+            currentProfile = membershipProfile,
+            usdToCadRate = tradeState.usdToCadRate,
+            onProfileSaved = { saved ->
+                membershipProfile = saved
+                val updatedSession = MemberSession(
+                    displayName = saved.fullName.ifBlank { memberSession?.displayName ?: "LG Member" },
+                    provider = saved.tier.title,
+                    handleOrEmail = saved.email
+                )
+                memberSession = updatedSession
+                MemberSessionPrefs.save(context, updatedSession)
+            },
+            onClose = { showMembershipScreen = false }
+        )
+        return
+    }
+
+    if (showThemeGallery) {
+        ThemePreviewGalleryScreen(
+            activeTheme = LgThemeState.activeTheme,
+            onSelectTheme = { chosen ->
+                LgThemeState.activeTheme = chosen
+                AppThemePrefs.save(context, chosen)
+            },
+            onClose = { showThemeGallery = false }
+        )
+        return
+    }
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDest = backStackEntry?.destination
 
     val marketsState by viewModel.marketsState.collectAsStateWithLifecycle()
-    val tradeState by viewModel.tradeState.collectAsStateWithLifecycle()
     val arbitrageState by viewModel.arbitrageState.collectAsStateWithLifecycle()
     val labsState by viewModel.labsState.collectAsStateWithLifecycle()
     val vaultState by viewModel.vaultState.collectAsStateWithLifecycle()
@@ -249,6 +305,7 @@ fun LgDigitalAppShell(
     var selectedTradeWorkspace by remember { mutableStateOf(TradeSubWorkspace.ORDER) }
     var showHelpSheet by remember { mutableStateOf(false) }
     var showAllPagesPreview by remember { mutableStateOf(false) }
+    var showFloatingAiChat by remember { mutableStateOf(false) }
     var topTabsExpanded by remember { mutableStateOf(false) }
 
     val navItems = listOf(
@@ -292,6 +349,16 @@ fun LgDigitalAppShell(
                 viewModel.sendAdvisorMessage(prompt)
                 navigateToTab(AdvisorRoute)
             }
+        )
+    }
+
+    if (showFloatingAiChat) {
+        FloatingAiChatBoxSheet(
+            advisorState = advisorState,
+            activeSymbol = tradeState.symbol,
+            onSendPrompt = viewModel::sendAdvisorMessage,
+            onOpenFullAdvisor = { navigateToTab(AdvisorRoute) },
+            onDismiss = { showFloatingAiChat = false }
         )
     }
 
@@ -377,11 +444,18 @@ fun LgDigitalAppShell(
     Scaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets.safeDrawing,
+        floatingActionButton = {
+            FloatingAiChatFab(
+                isGenerating = advisorState.isGenerating,
+                onClick = { showFloatingAiChat = true }
+            )
+        },
         topBar = {
             Surface(
-                color = LgColors.PanelSlate.copy(alpha = 0.94f),
+                color = LgColors.PanelSlate.copy(alpha = 0.95f),
                 tonalElevation = 2.dp
             ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -424,8 +498,25 @@ fun LgDigitalAppShell(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        IconButton(
+                            onClick = { showThemeGallery = true },
+                            modifier = Modifier.testTag("top_theme_gallery_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Palette,
+                                contentDescription = "8 Color Scheme Previews",
+                                tint = LgColors.GoldBright
+                            )
+                        }
+                        StatusPill(
+                            text = if (membershipProfile.tier == MembershipTier.STARTER) "JOIN PRO" else membershipProfile.tier.title.substringBefore(" ").uppercase(),
+                            color = LgColors.GoldBright,
+                            modifier = Modifier
+                                .clickable { showMembershipScreen = true }
+                                .testTag("top_membership_pill")
+                        )
                         StatusPill(
                             text = if (vaultState.account.autopilotRunning) "BOT ON" else "PAPER",
                             color = if (vaultState.account.autopilotRunning) LgColors.Turquoise else LgColors.Gold,
@@ -549,7 +640,7 @@ fun LgDigitalAppShell(
                                 }
 
                                 TabDropdownItem(
-                                    label = "11 STRATEGIES",
+                                    label = "STRATEGIES",
                                     icon = Icons.Filled.Tune,
                                     selected = currentDest?.hasRoute(TradeRoute::class) == true && selectedTradeWorkspace == TradeSubWorkspace.STRATEGIES,
                                     tag = "dropdown_tab_strategies"
@@ -642,6 +733,34 @@ fun LgDigitalAppShell(
                                 ) { showAllPagesPreview = true }
 
                                 TabDropdownItem(
+                                    label = "8 COLOR THEMES",
+                                    icon = Icons.Filled.Palette,
+                                    selected = false,
+                                    tag = "dropdown_tab_color_themes"
+                                ) {
+                                    showThemeGallery = true
+                                }
+
+                                TabDropdownItem(
+                                    label = "MEMBERSHIP & BILLING",
+                                    icon = Icons.Filled.WorkspacePremium,
+                                    selected = false,
+                                    tag = "dropdown_tab_membership_billing"
+                                ) {
+                                    showMembershipScreen = true
+                                }
+
+                                TabDropdownItem(
+                                    label = "WELCOME & SIGN IN",
+                                    icon = Icons.AutoMirrored.Filled.Login,
+                                    selected = false,
+                                    tag = "dropdown_tab_welcome_signin"
+                                ) {
+                                    welcomeStartOnSignIn = false
+                                    showWelcomeFlow = true
+                                }
+
+                                TabDropdownItem(
                                     label = "SUPPORT & HELP",
                                     icon = Icons.AutoMirrored.Outlined.HelpOutline,
                                     selected = false,
@@ -651,10 +770,14 @@ fun LgDigitalAppShell(
                         }
                     }
                 }
+                HorizontalDivider(color = LgColors.Gold.copy(alpha = 0.45f), thickness = 1.dp)
+                }
             }
         },
         bottomBar = {
             if (!useRail) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = LgColors.Gold.copy(alpha = 0.45f), thickness = 1.dp)
                 NavigationBar(
                     containerColor = LgColors.PanelSlate.copy(alpha = 0.96f),
                     contentColor = LgColors.InkPrimary,
@@ -688,6 +811,7 @@ fun LgDigitalAppShell(
                             modifier = Modifier.testTag(item.testTag)
                         )
                     }
+                }
                 }
             }
         }
@@ -756,9 +880,11 @@ fun LgDigitalAppShell(
                             isWide = isWide,
                             onRefreshAll = {
                                 viewModel.refreshMarkets()
+                                viewModel.refreshFearAndGreed()
                                 viewModel.scanArbitrage()
                                 viewModel.refreshAssetHistory()
                             },
+                            onRefreshFearGreed = viewModel::refreshFearAndGreed,
                             onRefreshNews = viewModel::refreshNews,
                             onSearchChange = viewModel::updateMarketSearch,
                             onToggleArbMode = { mode ->
@@ -793,6 +919,7 @@ fun LgDigitalAppShell(
                             },
                             onNavigateToTrade = { navigateToTab(TradeRoute) },
                             onOpenAllPagesPreview = { showAllPagesPreview = true },
+                            onOpenWalkthrough = { showHelpSheet = true },
                             onSelectHistoryAsset = viewModel::selectHistoryAsset,
                             onSelectHistoryWindow = viewModel::selectHistoryWindow,
                             onRefreshHistory = viewModel::refreshAssetHistory,
@@ -818,7 +945,11 @@ fun LgDigitalAppShell(
                             onToggleAutopilot = viewModel::toggleAutopilot,
                             onUpdateRiskConfig = viewModel::updateRiskConfig,
                             onRunAutopilotTick = viewModel::runAutopilotTick,
-                            onUpdateIndicatorBacktestConfig = viewModel::updateIndicatorBacktestConfig
+                            onUpdateIndicatorBacktestConfig = viewModel::updateIndicatorBacktestConfig,
+                            onSelectBaseCurrency = viewModel::selectBaseCurrency,
+                            onSelectConnectedExchange = viewModel::selectConnectedExchange,
+                            onScanExchangeMarket = { viewModel.scanEntireExchangeForProfit(autoApplyBest = false) },
+                            onApplyAdaptiveOpportunity = viewModel::applyAdaptiveOpportunity
                         )
                     }
                     composable<AdvisorRoute> {
@@ -900,12 +1031,38 @@ fun LgDigitalAppShell(
                                 autoLockOnBackground = enabled
                                 BiometricAuthManager.setAutoLockOnBackgroundEnabled(context, enabled)
                             },
-                            onLockDashboardNow = { isDashboardUnlocked = false }
+                            onLockDashboardNow = { isDashboardUnlocked = false },
+                            memberSession = memberSession,
+                            onOpenWelcomeSignIn = { openSignIn ->
+                                welcomeStartOnSignIn = openSignIn
+                                showWelcomeFlow = true
+                            },
+                            membershipProfile = membershipProfile,
+                            onOpenMembershipBilling = { showMembershipScreen = true },
+                            activeThemeName = LgThemeState.activeTheme.displayName,
+                            onOpenThemePreviews = { showThemeGallery = true }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Pop-Up Welcome Screen floating over the live turquoise-lined dashboard
+    if (showWelcomeFlow) {
+        WelcomeSignInScreen(
+            initialShowSignIn = welcomeStartOnSignIn,
+            existingSession = memberSession,
+            isPopUpOverlay = true,
+            onOpenMembershipSignUp = { showMembershipScreen = true },
+            onOpenThemePreviews = { showThemeGallery = true },
+            onCompleted = { session ->
+                memberSession = session
+                MemberSessionPrefs.save(context, session)
+                showWelcomeFlow = false
+                welcomeStartOnSignIn = false
+            }
+        )
     }
     }
 }

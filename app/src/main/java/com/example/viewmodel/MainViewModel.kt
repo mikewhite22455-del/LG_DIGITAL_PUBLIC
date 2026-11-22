@@ -14,11 +14,15 @@ import com.example.data.remote.AiAdvisorRepository
 import com.example.data.remote.MarketApiClient
 import com.example.domain.engine.ArbitrageEngine
 import com.example.domain.engine.TechnicalEngine
+import com.example.domain.models.AdaptiveOpportunity
 import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
+import com.example.domain.models.BaseFiatCurrency
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.ConnectedExchange
+import com.example.domain.models.FearGreedIndexData
 import com.example.domain.models.HistoryWindow
 import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.MarketBreadth
@@ -29,12 +33,14 @@ import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
@@ -71,12 +77,226 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         observeVaultStreams()
         refreshMarkets()
+        refreshFearAndGreed()
+        refreshFxRate()
         refreshNews()
         loadAssetHistory("BTC", HistoryWindow.H24)
         loadTradeContext("BTC", ChartTimeframe.H1, StrategyType.TREND_CROSS)
+        scanEntireExchangeForProfit(autoApplyBest = false)
         scanArbitrage()
+        scanBreakouts()
         searchDexPairs("SOL")
         loadMiningQuotes()
+        startAutoLiveTelemetryLoop()
+    }
+
+    /**
+     * Continuously streams live spot quotes, active OHLC candles, historical charts,
+     * Crypto Fear & Greed Index, full-exchange Adaptive Trader profit scans,
+     * cross-exchange arbitrage spreads, and breakout radar telemetry automatically.
+     */
+    private fun startAutoLiveTelemetryLoop() {
+        viewModelScope.launch {
+            var tick = 0
+            while (isActive) {
+                delay(15_000L)
+                tick++
+                refreshMarkets()
+                silentRefreshTradeCandles()
+                silentRefreshAssetHistory()
+                if (tick % 2 == 0) {
+                    scanArbitrage()
+                    scanBreakouts()
+                }
+                if (tick % 4 == 0) {
+                    refreshFearAndGreed()
+                    scanEntireExchangeForProfit(autoApplyBest = _vaultState.value.account.autopilotRunning)
+                }
+            }
+        }
+    }
+
+    fun refreshFxRate() {
+        viewModelScope.launch {
+            apiClient.fetchUsdToCadRate().onSuccess { rate ->
+                _tradeState.update { it.copy(usdToCadRate = rate) }
+            }
+        }
+    }
+
+    fun selectBaseCurrency(currency: BaseFiatCurrency) {
+        _tradeState.update {
+            it.copy(
+                baseCurrency = currency,
+                statusBanner = "Adaptive Trader funding currency set to ${currency.displayLabel} (1 USD = ${"%.3f".format(it.usdToCadRate)} CAD)."
+            )
+        }
+        refreshFxRate()
+    }
+
+    fun selectConnectedExchange(exchange: ConnectedExchange) {
+        _tradeState.update { it.copy(connectedExchange = exchange) }
+        scanEntireExchangeForProfit(autoApplyBest = false)
+    }
+
+    fun applyAdaptiveOpportunity(opp: AdaptiveOpportunity) {
+        loadTradeContext(opp.symbol, _tradeState.value.timeframe, opp.recommendedStrategy)
+        _tradeState.update {
+            it.copy(
+                statusBanner = "Adaptive target locked: ${opp.symbol} on ${opp.exchangeName} · ${opp.recommendedStrategy.title} (Score ${opp.profitScore.toInt()}, Backtest ${Formatters.formatPct(opp.backtestReturnPct)})."
+            )
+        }
+    }
+
+    /**
+     * Scans the entire connected exchange(s) for all liquid coins, fetches OHLC history for the
+     * top movers, evaluates ALL 11 quant strategies on each coin, and ranks every coin+strategy
+     * combination by profit-optimization score.
+     */
+    fun scanEntireExchangeForProfit(autoApplyBest: Boolean = false) {
+        viewModelScope.launch {
+            val currentTrade = _tradeState.value
+            if (currentTrade.isScanningExchange) return@launch
+            _tradeState.update { it.copy(isScanningExchange = true) }
+
+            val scanResult = apiClient.scanEntireExchangeMarket(
+                exchange = currentTrade.connectedExchange,
+                usdToCadRate = currentTrade.usdToCadRate
+            )
+
+            scanResult.onSuccess { res ->
+                // Evaluate top 8 discovered coins across the entire connected exchange concurrently
+                val topCandidates = res.candidates.take(8)
+                val evaluated = topCandidates.map { ticker ->
+                    async {
+                        val candles = apiClient.fetchCandles(ticker.symbol, currentTrade.timeframe)
+                            .getOrNull()
+                            ?.takeIf { it.size >= 35 }
+                            ?: return@async null
+
+                        // Evaluate all 11 strategies to find the profit-maximizing strategy for this coin
+                        var bestStrat = StrategyType.TREND_CROSS
+                        var bestSignal = TechnicalEngine.evaluateStrategy(candles, bestStrat)
+                        var bestBacktest = TechnicalEngine.runBacktest(
+                            symbol = ticker.symbol,
+                            candles = candles,
+                            strategy = bestStrat,
+                            timeframe = currentTrade.timeframe,
+                            feeBps = currentTrade.feeBps,
+                            slippageBps = currentTrade.slippageBps
+                        )
+                        var bestScore = Double.NEGATIVE_INFINITY
+
+                        StrategyType.entries.forEach { strat ->
+                            val sig = TechnicalEngine.evaluateStrategy(candles, strat)
+                            val bt = TechnicalEngine.runBacktest(
+                                symbol = ticker.symbol,
+                                candles = candles,
+                                strategy = strat,
+                                timeframe = currentTrade.timeframe,
+                                feeBps = currentTrade.feeBps,
+                                slippageBps = currentTrade.slippageBps
+                            )
+                            val actionBonus = when (sig.action) {
+                                SignalAction.BUY -> 16.0 + sig.confidence * 14.0
+                                SignalAction.SELL -> 6.0 + sig.confidence * 8.0
+                                SignalAction.HOLD -> 0.0
+                            }
+                            val stratScore = (bt.totalReturnPct * 1.8) +
+                                (bt.winRatePct * 0.35) -
+                                (bt.maxDrawdownPct * 0.9) +
+                                actionBonus +
+                                (ticker.change24hPct.coerceIn(-10.0, 20.0) * 0.45)
+
+                            if (stratScore > bestScore) {
+                                bestScore = stratScore
+                                bestStrat = strat
+                                bestSignal = sig
+                                bestBacktest = bt
+                            }
+                        }
+
+                        val normalizedScore = (50.0 + bestScore * 0.65).coerceIn(10.0, 99.0)
+                        AdaptiveOpportunity(
+                            symbol = ticker.symbol,
+                            exchangeName = ticker.exchangeName,
+                            pairLabel = ticker.pairLabel,
+                            priceUsd = ticker.priceUsd,
+                            change24hPct = ticker.change24hPct,
+                            volume24hUsd = ticker.volume24hUsd,
+                            recommendedStrategy = bestStrat,
+                            signalAction = bestSignal.action,
+                            signalConfidence = bestSignal.confidence,
+                            backtestReturnPct = bestBacktest.totalReturnPct,
+                            winRatePct = bestBacktest.winRatePct,
+                            maxDrawdownPct = bestBacktest.maxDrawdownPct,
+                            profitScore = normalizedScore,
+                            reason = bestSignal.reason
+                        )
+                    }
+                }.awaitAll().filterNotNull().sortedByDescending { it.profitScore }
+
+                val topPick = evaluated.firstOrNull()
+                val venuesLabel = res.venuesScanned.joinToString(" · ")
+                val summary = if (topPick != null) {
+                    "Scanned ${res.totalMarketsScanned} markets across $venuesLabel -> Top profit pick: ${topPick.symbol} (${topPick.recommendedStrategy.title}, ${Formatters.formatPct(topPick.backtestReturnPct)} backtest)"
+                } else {
+                    "Scanned ${res.totalMarketsScanned} markets across $venuesLabel"
+                }
+
+                _tradeState.update {
+                    it.copy(
+                        isScanningExchange = false,
+                        totalExchangeMarketsScanned = res.totalMarketsScanned,
+                        venuesScannedLabel = venuesLabel,
+                        adaptiveOpportunities = evaluated,
+                        exchangeScanSummary = summary,
+                        lastExchangeScanMs = System.currentTimeMillis()
+                    )
+                }
+
+                if (autoApplyBest && topPick != null) {
+                    loadTradeContext(topPick.symbol, currentTrade.timeframe, topPick.recommendedStrategy)
+                }
+            }.onFailure { err ->
+                _tradeState.update {
+                    it.copy(
+                        isScanningExchange = false,
+                        exchangeScanSummary = err.localizedMessage ?: "Exchange scan failed — check connection"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun silentRefreshAssetHistory() {
+        val current = _marketsState.value
+        val sym = current.selectedHistorySymbol
+        val win = current.historyWindow
+        viewModelScope.launch {
+            apiClient.fetchAssetHistory(sym, win).onSuccess { pts ->
+                if (_marketsState.value.selectedHistorySymbol == sym &&
+                    _marketsState.value.historyWindow == win
+                ) {
+                    _marketsState.update { it.copy(historyState = UiState.Success(pts)) }
+                }
+            }
+        }
+    }
+
+    private fun silentRefreshTradeCandles() {
+        val current = _tradeState.value
+        viewModelScope.launch {
+            apiClient.fetchCandles(current.symbol, current.timeframe).onSuccess { candles ->
+                if (_tradeState.value.symbol == current.symbol &&
+                    _tradeState.value.timeframe == current.timeframe
+                ) {
+                    cachedCandles = candles
+                    _tradeState.update { it.copy(candlesState = UiState.Success(candles)) }
+                    recomputeSignalAndBacktest(_tradeState.value.strategy)
+                }
+            }
+        }
     }
 
     private fun observeVaultStreams() {
@@ -214,12 +434,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     topGainer = list.maxByOrNull { it.change24hPct },
                     topLoser = list.minByOrNull { it.change24hPct }
                 )
-                _marketsState.update {
-                    it.copy(
+                _marketsState.update { state ->
+                    val updatedFng = (state.fearGreedState as? UiState.Success)?.data?.let { base ->
+                        UiState.Success(blendFearGreedWithLivePulse(base, breadth, list))
+                    } ?: state.fearGreedState
+                    state.copy(
                         tickersState = UiState.Success(list),
                         isRefreshing = false,
                         breadth = breadth,
-                        lastUpdatedMs = System.currentTimeMillis()
+                        lastUpdatedMs = System.currentTimeMillis(),
+                        fearGreedState = updatedFng
                     )
                 }
                 if (_labsState.value.researchProjection is UiState.Loading) {
@@ -238,6 +462,74 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun refreshFearAndGreed() {
+        viewModelScope.launch {
+            val hasData = _marketsState.value.fearGreedState is UiState.Success
+            _marketsState.update {
+                if (hasData) it.copy(isRefreshingFearGreed = true)
+                else it.copy(fearGreedState = UiState.Loading, isRefreshingFearGreed = true)
+            }
+            apiClient.fetchFearAndGreedIndex()
+                .onSuccess { raw ->
+                    val current = _marketsState.value
+                    val tickers = (current.tickersState as? UiState.Success)?.data.orEmpty()
+                    val blended = blendFearGreedWithLivePulse(raw, current.breadth, tickers)
+                    _marketsState.update {
+                        it.copy(
+                            fearGreedState = UiState.Success(blended),
+                            isRefreshingFearGreed = false
+                        )
+                    }
+                }
+                .onFailure { err ->
+                    _marketsState.update {
+                        if (hasData) {
+                            it.copy(isRefreshingFearGreed = false)
+                        } else {
+                            it.copy(
+                                fearGreedState = UiState.Error(
+                                    err.localizedMessage ?: "Unable to fetch Crypto Fear & Greed API"
+                                ),
+                                isRefreshingFearGreed = false
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    /**
+     * Combines the official external Fear & Greed API reading (75% weight) with real-time
+     * market breadth, average 24h momentum, and intraday range volatility (25% weight)
+     * so the index updates dynamically on every live market refresh.
+     */
+    private fun blendFearGreedWithLivePulse(
+        base: FearGreedIndexData,
+        breadth: MarketBreadth?,
+        tickers: List<MarketTicker>
+    ): FearGreedIndexData {
+        if (breadth == null || breadth.totalAssets == 0 || tickers.isEmpty()) {
+            return base
+        }
+        val advRatio = (breadth.advancing.toDouble() / breadth.totalAssets.toDouble()) * 100.0
+        val momentumBoost = (breadth.avgChangePct * 4.5).coerceIn(-25.0, 25.0)
+        val avgRangePct = tickers.mapNotNull { t ->
+            if (t.low24h > 0.0) ((t.high24h - t.low24h) / t.low24h) * 100.0 else null
+        }.average().takeIf { !it.isNaN() } ?: 4.0
+        // Elevated volatility dampens greed slightly (uncertainty)
+        val volatilityPenalty = ((avgRangePct - 6.0).coerceAtLeast(0.0) * 1.4).coerceAtMost(12.0)
+
+        val livePulseScore = (advRatio * 0.65 + 20.0 + momentumBoost - volatilityPenalty).coerceIn(0.0, 100.0)
+        val blended = (base.apiValue * 0.75 + livePulseScore * 0.25).toInt().coerceIn(0, 100)
+        val delta = blended - base.apiValue
+        return base.copy(
+            liveValue = blended,
+            liveClassification = MarketApiClient.classifyFearGreed(blended),
+            liveMomentumAdjustment = delta,
+            updatedAtMs = System.currentTimeMillis()
+        )
     }
 
     fun updateMarketSearch(query: String) {
@@ -443,71 +735,165 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun runAutopilotTick() {
         viewModelScope.launch {
             val acct = _vaultState.value.account
-            val symbol = _tradeState.value.symbol
+            val tradeSnap = _tradeState.value
+            val fiat = tradeSnap.baseCurrency
+            val fx = tradeSnap.usdToCadRate
+
             if (!acct.autopilotRunning) {
-                _tradeState.update { it.copy(statusBanner = "Autopilot is paused. Toggle Armed to run a tick.") }
+                _tradeState.update { it.copy(statusBanner = "Autopilot is paused. Tap START AUTOPILOT to arm whole-exchange trading.") }
                 return@launch
             }
             if (TechnicalEngine.isInsideStopSchedule(acct.stopSchedule)) {
-                repository.logMemory("STOP_SCHEDULE_GUARD", symbol, "Tick blocked inside stop window (${acct.stopSchedule}).")
+                repository.logMemory("STOP_SCHEDULE_GUARD", tradeSnap.symbol, "Tick blocked inside stop window (${acct.stopSchedule}).")
                 _tradeState.update { it.copy(statusBanner = "Blocked: Inside stop-schedule (${acct.stopSchedule}).") }
                 return@launch
             }
             if (_vaultState.value.currentDrawdownPct >= acct.maxDrawdownPct) {
                 repository.updateAccountConfig(autopilotRunning = false)
-                repository.logMemory("DRAWDOWN_LOCK", symbol, "Auto-stopped at ${"%.2f".format(_vaultState.value.currentDrawdownPct)}% DD.")
+                repository.logMemory("DRAWDOWN_LOCK", tradeSnap.symbol, "Auto-stopped at ${"%.2f".format(_vaultState.value.currentDrawdownPct)}% DD.")
                 _tradeState.update { it.copy(statusBanner = "Auto-stopped: Drawdown exceeded ${acct.maxDrawdownPct}% limit.") }
                 return@launch
             }
 
             val profile = RiskProfile.entries.firstOrNull { it.label == acct.riskProfile } ?: RiskProfile.MEDIUM
             if (acct.dailyNotionalUsedUsd >= profile.maxDailyNotionalUsd) {
-                _tradeState.update { it.copy(statusBanner = "Daily cap reached ($${"%.0f".format(profile.maxDailyNotionalUsd)}).") }
+                _tradeState.update {
+                    it.copy(statusBanner = "Daily cap reached (${Formatters.formatFiat(profile.maxDailyNotionalUsd, fiat, fx)}).")
+                }
                 return@launch
             }
 
-            val candles = cachedCandles
-            val signal = TechnicalEngine.evaluateStrategy(candles, _tradeState.value.strategy)
+            // 1. Scan entire connected exchange if cache is empty or stale (> 90s)
+            var opps = _tradeState.value.adaptiveOpportunities
+            if (opps.isEmpty() || (System.currentTimeMillis() - _tradeState.value.lastExchangeScanMs) > 90_000L) {
+                _tradeState.update {
+                    it.copy(statusBanner = "Scanning ${tradeSnap.connectedExchange.displayName} (${fiat.code}) for optimal coin & strategy...")
+                }
+                val res = apiClient.scanEntireExchangeMarket(tradeSnap.connectedExchange, fx).getOrNull()
+                if (res != null && res.candidates.isNotEmpty()) {
+                    val evaluated = res.candidates.take(6).map { ticker ->
+                        async {
+                            val c = apiClient.fetchCandles(ticker.symbol, tradeSnap.timeframe).getOrNull()?.takeIf { it.size >= 35 }
+                                ?: return@async null
+                            var bestStrat = StrategyType.TREND_CROSS
+                            var bestSig = TechnicalEngine.evaluateStrategy(c, bestStrat)
+                            var bestBt = TechnicalEngine.runBacktest(ticker.symbol, c, bestStrat, tradeSnap.timeframe, tradeSnap.feeBps, tradeSnap.slippageBps)
+                            var bestScore = Double.NEGATIVE_INFINITY
+                            StrategyType.entries.forEach { strat ->
+                                val sig = TechnicalEngine.evaluateStrategy(c, strat)
+                                val bt = TechnicalEngine.runBacktest(ticker.symbol, c, strat, tradeSnap.timeframe, tradeSnap.feeBps, tradeSnap.slippageBps)
+                                val actBonus = when (sig.action) {
+                                    SignalAction.BUY -> 16.0 + sig.confidence * 14.0
+                                    SignalAction.SELL -> 6.0 + sig.confidence * 8.0
+                                    SignalAction.HOLD -> 0.0
+                                }
+                                val score = bt.totalReturnPct * 1.8 + bt.winRatePct * 0.35 - bt.maxDrawdownPct * 0.9 + actBonus
+                                if (score > bestScore) {
+                                    bestScore = score
+                                    bestStrat = strat
+                                    bestSig = sig
+                                    bestBt = bt
+                                }
+                            }
+                            AdaptiveOpportunity(
+                                symbol = ticker.symbol,
+                                exchangeName = ticker.exchangeName,
+                                pairLabel = ticker.pairLabel,
+                                priceUsd = ticker.priceUsd,
+                                change24hPct = ticker.change24hPct,
+                                volume24hUsd = ticker.volume24hUsd,
+                                recommendedStrategy = bestStrat,
+                                signalAction = bestSig.action,
+                                signalConfidence = bestSig.confidence,
+                                backtestReturnPct = bestBt.totalReturnPct,
+                                winRatePct = bestBt.winRatePct,
+                                maxDrawdownPct = bestBt.maxDrawdownPct,
+                                profitScore = (50.0 + bestScore * 0.65).coerceIn(10.0, 99.0),
+                                reason = bestSig.reason
+                            )
+                        }
+                    }.awaitAll().filterNotNull().sortedByDescending { it.profitScore }
+                    if (evaluated.isNotEmpty()) {
+                        opps = evaluated
+                        _tradeState.update {
+                            it.copy(
+                                totalExchangeMarketsScanned = res.totalMarketsScanned,
+                                venuesScannedLabel = res.venuesScanned.joinToString(" · "),
+                                adaptiveOpportunities = evaluated,
+                                lastExchangeScanMs = System.currentTimeMillis()
+                            )
+                        }
+                    }
+                }
+            }
 
-            if (acct.htfConfirmation && signal.action != SignalAction.HOLD) {
-                val h4 = apiClient.fetchCandles(symbol, ChartTimeframe.H4).getOrNull()
+            // 2. Prioritize exiting open holdings on SELL, otherwise take the highest-profit BUY across the whole exchange
+            val heldSymbols = _vaultState.value.holdings.map { it.symbol }.toSet()
+            val sellHoldingOpp = opps.firstOrNull { it.symbol in heldSymbols && it.signalAction == SignalAction.SELL }
+            val bestBuyOpp = opps.firstOrNull { it.signalAction == SignalAction.BUY }
+            val chosenOpp = sellHoldingOpp ?: bestBuyOpp ?: opps.firstOrNull()
+
+            val targetSymbol = chosenOpp?.symbol ?: tradeSnap.symbol
+            val targetStrategy = chosenOpp?.recommendedStrategy ?: tradeSnap.strategy
+            val targetExchange = chosenOpp?.exchangeName ?: tradeSnap.connectedExchange.shortLabel
+            val fallbackSignal = TechnicalEngine.evaluateStrategy(cachedCandles, targetStrategy)
+            val targetAction = chosenOpp?.signalAction ?: fallbackSignal.action
+            val targetPrice = chosenOpp?.priceUsd ?: currentPriceFor(targetSymbol) ?: fallbackSignal.entryPrice
+            val targetReason = chosenOpp?.let {
+                "[${it.exchangeName} · ${fiat.code}] ${it.recommendedStrategy.title} (Score ${it.profitScore.toInt()}): ${it.reason}"
+            } ?: fallbackSignal.reason
+
+            if (chosenOpp != null && (targetSymbol != tradeSnap.symbol || targetStrategy != tradeSnap.strategy)) {
+                loadTradeContext(targetSymbol, tradeSnap.timeframe, targetStrategy)
+            }
+
+            if (acct.htfConfirmation && targetAction != SignalAction.HOLD) {
+                val h4 = apiClient.fetchCandles(targetSymbol, ChartTimeframe.H4).getOrNull()
                 if (h4 != null && h4.size >= 30) {
                     val htfSig = TechnicalEngine.evaluateStrategy(h4, StrategyType.TREND_CROSS)
-                    if (htfSig.action != SignalAction.HOLD && htfSig.action != signal.action) {
-                        repository.logMemory("HTF_FILTER", symbol, "Skipped ${signal.action} against 4h trend (${htfSig.action}).")
-                        _tradeState.update { it.copy(statusBanner = "Skipped ${signal.action}: 4h trend filter disagrees (${htfSig.action}).") }
+                    if (htfSig.action != SignalAction.HOLD && htfSig.action != targetAction) {
+                        repository.logMemory("HTF_FILTER", targetSymbol, "Skipped $targetAction on $targetExchange against 4h trend (${htfSig.action}).")
+                        _tradeState.update {
+                            it.copy(statusBanner = "Skipped $targetAction on $targetSymbol ($targetExchange): 4h trend filter disagrees (${htfSig.action}).")
+                        }
                         return@launch
                     }
                 }
             }
 
-            val price = signal.entryPrice
-            val msg = when (signal.action) {
+            val msg = when (targetAction) {
                 SignalAction.BUY -> {
                     val orderUsd = minOf(profile.maxOrderUsd, acct.usdBalance)
                     if (orderUsd < 10.0) {
-                        "Autopilot HOLD: Insufficient paper USD."
+                        "Autopilot HOLD: Insufficient ${fiat.code} buying power."
                     } else {
-                        repository.executePaperBuy(symbol, orderUsd, price, _tradeState.value.strategy.id, signal.reason)
-                            .fold({ "Autopilot BUY: $it" }, { it.message ?: "Buy blocked" })
+                        repository.executePaperBuy(targetSymbol, orderUsd, targetPrice, "adaptive_${targetStrategy.id}", targetReason)
+                            .fold(
+                                { "Adaptive BUY [$targetExchange · ${fiat.code}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol via ${targetStrategy.title}" },
+                                { it.message ?: "Buy blocked" }
+                            )
                     }
                 }
                 SignalAction.SELL -> {
-                    val holding = _vaultState.value.holdings.firstOrNull { it.symbol == symbol }
+                    val holding = _vaultState.value.holdings.firstOrNull { it.symbol == targetSymbol }
                     if (holding == null) {
-                        "Autopilot HOLD: SELL signal on $symbol, no open holding."
+                        "Autopilot HOLD: SELL signal on $targetSymbol ($targetExchange), no open holding."
                     } else {
-                        val orderUsd = minOf(profile.maxOrderUsd, holding.quantity * price)
-                        repository.executePaperSell(symbol, orderUsd, price, _tradeState.value.strategy.id, signal.reason)
-                            .fold({ "Autopilot SELL: $it" }, { it.message ?: "Sell blocked" })
+                        val orderUsd = minOf(profile.maxOrderUsd, holding.quantity * targetPrice)
+                        repository.executePaperSell(targetSymbol, orderUsd, targetPrice, "adaptive_${targetStrategy.id}", targetReason)
+                            .fold(
+                                { "Adaptive SELL [$targetExchange · ${fiat.code}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol via ${targetStrategy.title}" },
+                                { it.message ?: "Sell blocked" }
+                            )
                     }
                 }
                 SignalAction.HOLD -> {
-                    repository.logMemory("AUTOPILOT_HOLD", symbol, "${_tradeState.value.strategy.title}: ${signal.reason}")
-                    "Autopilot HOLD: ${signal.reason}"
+                    val summary = "Scanned ${_tradeState.value.totalExchangeMarketsScanned} markets ($targetExchange) · Top coin $targetSymbol (${targetStrategy.title}) is HOLD."
+                    repository.logMemory("AUTOPILOT_HOLD", targetSymbol, summary)
+                    summary
                 }
             }
-            _tradeState.update { it.copy(liveSignal = signal, statusBanner = msg) }
+            _tradeState.update { it.copy(statusBanner = msg) }
         }
     }
 

@@ -406,16 +406,12 @@ fun IndicatorBacktesterView(
             val stratColor = if (stratUp) LgColors.Turquoise else LgColors.Crimson
             val alphaUp = result.alphaPct >= 0.0
 
-            ElevatedCard(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            CyberFrameCard(
+                title = "BACKTEST PERFORMANCE",
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // Header: Simulated Equity + Outperformance Badge
@@ -491,7 +487,7 @@ fun IndicatorBacktesterView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF070E1A))
+                            .background(LgColors.ObsidianBg)
                             .border(1.dp, LgColors.BorderHairline.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -777,7 +773,7 @@ private fun EquityComparisonCanvas(
             .fillMaxWidth()
             .height(190.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF070E1A))
+            .background(LgColors.ObsidianBg)
             .border(1.dp, LgColors.BorderHairline, RoundedCornerShape(12.dp))
             .padding(10.dp)
     ) {
@@ -931,7 +927,7 @@ private fun PriceAndSignalsCanvas(
             .fillMaxWidth()
             .height(190.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF070E1A))
+            .background(LgColors.ObsidianBg)
             .border(1.dp, LgColors.BorderHairline, RoundedCornerShape(12.dp))
             .padding(10.dp)
     ) {
@@ -1018,7 +1014,7 @@ private fun PriceAndSignalsCanvas(
                 val markerColor = if (isBuy) LgColors.Turquoise else LgColors.Crimson
 
                 drawCircle(color = markerColor.copy(alpha = 0.30f), radius = 11f, center = Offset(cx, cy))
-                drawCircle(color = Color(0xFF070E1A), radius = 6.5f, center = Offset(cx, cy))
+                drawCircle(color = LgColors.ObsidianBg, radius = 6.5f, center = Offset(cx, cy))
                 drawCircle(color = markerColor, radius = 4.8f, center = Offset(cx, cy))
             }
 

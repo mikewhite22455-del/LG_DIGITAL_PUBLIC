@@ -22,13 +22,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +55,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,17 +65,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.core.CoinAssets
 import com.example.domain.models.SignalAction
-import com.example.ui.theme.ChakraPetchFontFamily
 import com.example.ui.theme.LgColors
+import com.example.ui.theme.RussoOneFontFamily
+import com.example.ui.theme.TradingViewFontFamily
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Shared deep oceanic-teal + glowing turquoise & gold circuit-board backdrop
- * matching the Old Layout & Welcome Screen aesthetic and LG coin palette.
+ * Shared deep oceanic-teal + bright glowing turquoise-lined circuit-board backdrop
+ * rendered continuously behind every screen, card, and pop-up across the app.
  */
 @Composable
 fun LgCircuitBackground(
@@ -73,10 +90,10 @@ fun LgCircuitBackground(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF07232B),
+                        LgColors.TealAmbient,
                         LgColors.ObsidianBg,
-                        Color(0xFF04171F),
-                        Color(0xFF020B10)
+                        LgColors.PanelSlate,
+                        LgColors.ObsidianBg
                     )
                 )
             )
@@ -84,98 +101,158 @@ fun LgCircuitBackground(
                 val w = size.width
                 val h = size.height
 
-                // Ambient coin-matched turquoise radial glow near top center
+                // Ambient bright turquoise radial glow near top center
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            LgColors.Turquoise.copy(alpha = 0.14f),
-                            LgColors.TealAmbient.copy(alpha = 0.06f),
+                            LgColors.Turquoise.copy(alpha = 0.24f),
+                            LgColors.TealAmbient.copy(alpha = 0.12f),
                             Color.Transparent
                         ),
                         center = Offset(w * 0.5f, h * 0.14f),
-                        radius = maxOf(w, h) * 0.55f
+                        radius = maxOf(w, h) * 0.62f
                     ),
                     center = Offset(w * 0.5f, h * 0.14f),
-                    radius = maxOf(w, h) * 0.55f
+                    radius = maxOf(w, h) * 0.62f
                 )
 
-                // Warm subtle gold radial shimmer near bottom
+                // Warm bright gold radial shimmer near bottom right
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            LgColors.Gold.copy(alpha = 0.07f),
+                            LgColors.GoldBright.copy(alpha = 0.15f),
                             Color.Transparent
                         ),
-                        center = Offset(w * 0.85f, h * 0.82f),
-                        radius = maxOf(w, h) * 0.42f
+                        center = Offset(w * 0.85f, h * 0.84f),
+                        radius = maxOf(w, h) * 0.48f
                     ),
-                    center = Offset(w * 0.85f, h * 0.82f),
-                    radius = maxOf(w, h) * 0.42f
+                    center = Offset(w * 0.85f, h * 0.84f),
+                    radius = maxOf(w, h) * 0.48f
                 )
 
-                val turqTrace = LgColors.Turquoise.copy(alpha = 0.16f)
-                val goldTrace = LgColors.Gold.copy(alpha = 0.14f)
+                // Full-screen glowing turquoise lined matrix grid (horizontal + vertical lines)
+                val gridSpacing = 54f
+                val gridLineColor = LgColors.Turquoise.copy(alpha = 0.16f)
+                val majorLineColor = LgColors.Turquoise.copy(alpha = 0.30f)
+
+                var gx = 0f
+                var colIdx = 0
+                while (gx <= w) {
+                    val isMajor = colIdx % 3 == 0
+                    drawLine(
+                        color = if (isMajor) majorLineColor else gridLineColor,
+                        start = Offset(gx, 0f),
+                        end = Offset(gx, h),
+                        strokeWidth = if (isMajor) 1.5f else 0.9f
+                    )
+                    gx += gridSpacing
+                    colIdx++
+                }
+
+                var gy = 0f
+                var rowIdx = 0
+                while (gy <= h) {
+                    val isMajor = rowIdx % 3 == 0
+                    drawLine(
+                        color = if (isMajor) majorLineColor else gridLineColor,
+                        start = Offset(0f, gy),
+                        end = Offset(w, gy),
+                        strokeWidth = if (isMajor) 1.5f else 0.9f
+                    )
+                    gy += gridSpacing
+                    rowIdx++
+                }
+
+                // Bright turquoise circuit buses & gold accent traces spanning the entire background
+                val turqTraceBright = LgColors.Turquoise.copy(alpha = 0.48f)
+                val turqTraceMid = LgColors.CyanGlow.copy(alpha = 0.34f)
+                val goldTrace = LgColors.GoldBright.copy(alpha = 0.30f)
 
                 // Left rail circuit traces
                 drawCircuitPath(
                     points = listOf(
-                        Offset(w * 0.02f, h * 0.08f),
-                        Offset(w * 0.08f, h * 0.13f),
-                        Offset(w * 0.08f, h * 0.29f),
-                        Offset(w * 0.03f, h * 0.34f)
+                        Offset(w * 0.02f, h * 0.06f),
+                        Offset(w * 0.14f, h * 0.12f),
+                        Offset(w * 0.14f, h * 0.28f),
+                        Offset(w * 0.32f, h * 0.34f),
+                        Offset(w * 0.32f, h * 0.44f)
                     ),
-                    color = turqTrace,
+                    color = turqTraceBright,
+                    strokeWidth = 2.6f
+                )
+                drawCircuitPath(
+                    points = listOf(
+                        Offset(0f, h * 0.40f),
+                        Offset(w * 0.10f, h * 0.47f),
+                        Offset(w * 0.10f, h * 0.68f),
+                        Offset(w * 0.24f, h * 0.74f),
+                        Offset(w * 0.52f, h * 0.74f)
+                    ),
+                    color = goldTrace,
                     strokeWidth = 2.2f
                 )
                 drawCircuitPath(
                     points = listOf(
-                        Offset(0f, h * 0.42f),
-                        Offset(w * 0.06f, h * 0.47f),
-                        Offset(w * 0.06f, h * 0.68f),
-                        Offset(w * 0.12f, h * 0.74f)
+                        Offset(w * 0.03f, h * 0.79f),
+                        Offset(w * 0.16f, h * 0.86f),
+                        Offset(w * 0.16f, h * 0.96f)
                     ),
-                    color = goldTrace,
-                    strokeWidth = 1.8f
+                    color = turqTraceBright,
+                    strokeWidth = 2.5f
+                )
+
+                // Center cross-screen turquoise data buses
+                drawCircuitPath(
+                    points = listOf(
+                        Offset(w * 0.22f, h * 0.18f),
+                        Offset(w * 0.48f, h * 0.18f),
+                        Offset(w * 0.56f, h * 0.24f),
+                        Offset(w * 0.78f, h * 0.24f)
+                    ),
+                    color = turqTraceMid,
+                    strokeWidth = 2.2f
                 )
                 drawCircuitPath(
                     points = listOf(
-                        Offset(w * 0.03f, h * 0.80f),
-                        Offset(w * 0.11f, h * 0.86f),
-                        Offset(w * 0.11f, h * 0.95f)
+                        Offset(w * 0.18f, h * 0.56f),
+                        Offset(w * 0.44f, h * 0.56f),
+                        Offset(w * 0.52f, h * 0.50f),
+                        Offset(w * 0.82f, h * 0.50f)
                     ),
-                    color = turqTrace,
-                    strokeWidth = 2.0f
+                    color = turqTraceBright,
+                    strokeWidth = 2.3f
                 )
 
                 // Right rail circuit traces
                 drawCircuitPath(
                     points = listOf(
-                        Offset(w * 0.98f, h * 0.10f),
-                        Offset(w * 0.91f, h * 0.16f),
-                        Offset(w * 0.91f, h * 0.33f),
-                        Offset(w * 0.97f, h * 0.39f)
+                        Offset(w * 0.98f, h * 0.09f),
+                        Offset(w * 0.86f, h * 0.15f),
+                        Offset(w * 0.86f, h * 0.32f),
+                        Offset(w * 0.70f, h * 0.38f)
                     ),
                     color = goldTrace,
-                    strokeWidth = 1.8f
-                )
-                drawCircuitPath(
-                    points = listOf(
-                        Offset(w, h * 0.48f),
-                        Offset(w * 0.93f, h * 0.54f),
-                        Offset(w * 0.93f, h * 0.72f),
-                        Offset(w * 0.87f, h * 0.78f)
-                    ),
-                    color = turqTrace,
                     strokeWidth = 2.2f
                 )
                 drawCircuitPath(
                     points = listOf(
-                        Offset(w * 0.96f, h * 0.84f),
-                        Offset(w * 0.88f, h * 0.90f),
-                        Offset(w * 0.88f, h * 0.97f)
+                        Offset(w, h * 0.47f),
+                        Offset(w * 0.88f, h * 0.53f),
+                        Offset(w * 0.88f, h * 0.72f),
+                        Offset(w * 0.74f, h * 0.79f)
                     ),
-                    color = goldTrace,
-                    strokeWidth = 1.8f
+                    color = turqTraceBright,
+                    strokeWidth = 2.6f
+                )
+                drawCircuitPath(
+                    points = listOf(
+                        Offset(w * 0.96f, h * 0.84f),
+                        Offset(w * 0.82f, h * 0.90f),
+                        Offset(w * 0.58f, h * 0.90f),
+                        Offset(w * 0.50f, h * 0.96f)
+                    ),
+                    color = turqTraceMid,
+                    strokeWidth = 2.2f
                 )
             },
         content = content
@@ -199,23 +276,25 @@ private fun DrawScope.drawCircuitPath(
         color = color,
         style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
     )
-    drawCircle(color = color.copy(alpha = (color.alpha * 1.9f).coerceAtMost(0.5f)), radius = 4f, center = points.first())
-    drawCircle(color = color.copy(alpha = (color.alpha * 1.9f).coerceAtMost(0.5f)), radius = 4f, center = points.last())
+    drawCircle(color = color.copy(alpha = (color.alpha * 1.9f).coerceAtMost(0.75f)), radius = 4.5f, center = points.first())
+    drawCircle(color = color.copy(alpha = (color.alpha * 1.9f).coerceAtMost(0.75f)), radius = 4.5f, center = points.last())
 }
 
 @Composable
 fun GlassPanelCard(
     modifier: Modifier = Modifier,
-    highlightBorder: Color = LgColors.BorderHairline,
+    highlightBorder: Color = LgColors.Turquoise.copy(alpha = 0.52f),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .circuitTextFieldBackdrop(cornerRadius = 12.dp, drawBorder = false),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = LgColors.PanelSlate.copy(alpha = 0.92f)
+            containerColor = LgColors.PanelSlate.copy(alpha = 0.74f)
         ),
-        border = BorderStroke(1.dp, highlightBorder),
+        border = BorderStroke(1.1.dp, highlightBorder),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         content = content
     )
@@ -228,30 +307,87 @@ fun CyberFrameCard(
     accentColor: Color = LgColors.Turquoise,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val gold = LgColors.Gold
+    val gold = LgColors.GoldBright
+    val cardTopBg = LgColors.TealAmbient.copy(alpha = 0.76f)
+    val cardMidBg = LgColors.PanelSlate.copy(alpha = 0.82f)
+    val cardBotBg = LgColors.ObsidianBg.copy(alpha = 0.88f)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(
                 Brush.verticalGradient(
-                    listOf(LgColors.PanelSlate.copy(alpha = 0.95f), Color(0xFF041319))
+                    listOf(cardTopBg, cardMidBg, cardBotBg)
                 )
             )
             .drawBehind {
-                val stroke = 2.4f
-                val cornerLen = 28f
+                val stroke = 2.8f
+                val cornerLen = 30f
                 val w = size.width
                 val h = size.height
 
-                // Outer subtle turquoise frame
-                drawRect(
-                    color = accentColor.copy(alpha = 0.30f),
-                    topLeft = Offset(1f, 1f),
-                    size = Size(w - 2f, h - 2f),
-                    style = Stroke(width = 1.5f)
+                // Bright turquoise radial + lined circuit traces behind card content
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            LgColors.Turquoise.copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        center = Offset(w * 0.18f, h * 0.16f),
+                        radius = maxOf(w, h) * 0.55f
+                    ),
+                    center = Offset(w * 0.18f, h * 0.16f),
+                    radius = maxOf(w, h) * 0.55f
+                )
+                // Subtle internal turquoise blueprint lines
+                val step = 46f
+                var lx = step
+                while (lx < w) {
+                    drawLine(
+                        color = accentColor.copy(alpha = 0.10f),
+                        start = Offset(lx, 0f),
+                        end = Offset(lx, h),
+                        strokeWidth = 1f
+                    )
+                    lx += step
+                }
+                var ly = step
+                while (ly < h) {
+                    drawLine(
+                        color = accentColor.copy(alpha = 0.10f),
+                        start = Offset(0f, ly),
+                        end = Offset(w, ly),
+                        strokeWidth = 1f
+                    )
+                    ly += step
+                }
+                drawCircuitPath(
+                    points = listOf(
+                        Offset(w * 0.03f, h * 0.14f),
+                        Offset(w * 0.12f, h * 0.22f),
+                        Offset(w * 0.12f, h * 0.58f)
+                    ),
+                    color = accentColor.copy(alpha = 0.28f),
+                    strokeWidth = 1.8f
+                )
+                drawCircuitPath(
+                    points = listOf(
+                        Offset(w * 0.97f, h * 0.82f),
+                        Offset(w * 0.86f, h * 0.72f),
+                        Offset(w * 0.86f, h * 0.36f)
+                    ),
+                    color = gold.copy(alpha = 0.24f),
+                    strokeWidth = 1.7f
                 )
 
-                // Gold corner brackets
+                // Outer crisp turquoise frame
+                drawRect(
+                    color = accentColor.copy(alpha = 0.46f),
+                    topLeft = Offset(1f, 1f),
+                    size = Size(w - 2f, h - 2f),
+                    style = Stroke(width = 1.6f)
+                )
+
+                // Bright gold corner brackets
                 drawLine(gold, Offset(2f, 2f), Offset(cornerLen, 2f), strokeWidth = stroke)
                 drawLine(gold, Offset(2f, 2f), Offset(2f, cornerLen), strokeWidth = stroke)
                 drawLine(gold, Offset(w - cornerLen, 2f), Offset(w - 2f, 2f), strokeWidth = stroke)
@@ -261,18 +397,18 @@ fun CyberFrameCard(
                 drawLine(gold, Offset(w - cornerLen, h - 2f), Offset(w - 2f, h - 2f), strokeWidth = stroke)
                 drawLine(gold, Offset(w - 2f, h - cornerLen), Offset(w - 2f, h - 2f), strokeWidth = stroke)
 
-                // Mid-rail turquoise circuit glow strips
+                // Mid-rail bright turquoise circuit glow strips
                 drawLine(
-                    color = accentColor.copy(alpha = 0.78f),
-                    start = Offset(2f, h * 0.28f),
-                    end = Offset(2f, h * 0.72f),
-                    strokeWidth = 3f
+                    color = accentColor.copy(alpha = 0.92f),
+                    start = Offset(2f, h * 0.26f),
+                    end = Offset(2f, h * 0.74f),
+                    strokeWidth = 3.2f
                 )
                 drawLine(
-                    color = accentColor.copy(alpha = 0.78f),
-                    start = Offset(w - 2f, h * 0.28f),
-                    end = Offset(w - 2f, h * 0.72f),
-                    strokeWidth = 3f
+                    color = accentColor.copy(alpha = 0.92f),
+                    start = Offset(w - 2f, h * 0.26f),
+                    end = Offset(w - 2f, h * 0.74f),
+                    strokeWidth = 3.2f
                 )
             }
             .padding(14.dp)
@@ -289,19 +425,20 @@ fun CyberFrameCard(
                 ) {
                     HorizontalDivider(
                         modifier = Modifier.weight(1f),
-                        color = LgColors.Gold.copy(alpha = 0.5f)
+                        color = LgColors.Gold.copy(alpha = 0.62f)
                     )
                     Text(
                         text = title.uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = LgColors.Gold,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = RussoOneFontFamily,
+                        fontSize = 14.sp,
+                        letterSpacing = 1.1.sp,
+                        color = LgColors.GoldBright,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     HorizontalDivider(
                         modifier = Modifier.weight(1f),
-                        color = LgColors.Gold.copy(alpha = 0.5f)
+                        color = LgColors.Gold.copy(alpha = 0.62f)
                     )
                 }
             }
@@ -343,9 +480,10 @@ fun GoldMetallicButton(
     ) {
         Text(
             text = text.uppercase(),
-            style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) Color(0xFF071318) else LgColors.InkMuted,
-            fontWeight = FontWeight.ExtraBold,
+            fontFamily = RussoOneFontFamily,
+            fontSize = 14.sp,
+            letterSpacing = 0.9.sp,
+            color = if (enabled) Color(0xFF051319) else LgColors.InkMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -430,7 +568,7 @@ private fun SingleSentimentGauge(
 /**
  * Displays the authentic coin logo for every cryptocurrency across the app:
  * bundled coin drawables when available, plus crisp custom vector emblems for
- * stablecoins (USDT, USDC) and PoW/staking/DEX tokens (ALEO, KAS, ETC, XMR, BNB, etc.).
+ * stablecoins (USDT, USDC) and PoW/staking/DEX tokens (KAS, ETC, XMR, BNB, DASH, etc.).
  */
 @Composable
 fun CoinAvatar(
@@ -471,7 +609,6 @@ private fun CustomCoinLogoBadge(
     val palette = when (symbol) {
         "USDT" -> Pair(Color(0xFF1BA27A), Color(0xFF0C5C45))
         "USDC" -> Pair(Color(0xFF2775CA), Color(0xFF14427A))
-        "ALEO" -> Pair(LgColors.Turquoise, LgColors.Gold)
         "KAS" -> Pair(Color(0xFF49EACB), Color(0xFF0E534A))
         "ETC" -> Pair(Color(0xFF3AB83A), Color(0xFF144D23))
         "XMR" -> Pair(Color(0xFFFF6600), Color(0xFF282B30))
@@ -546,28 +683,11 @@ private fun CustomCoinLogoBadge(
                 }
                 Text(
                     text = "$",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.45f).sp,
                     color = Color.White
                 )
-            }
-            "ALEO" -> {
-                Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.18f)) {
-                    val w = this.size.width
-                    val h = this.size.height
-                    val p = Path().apply {
-                        moveTo(w * 0.50f, h * 0.12f)
-                        lineTo(w * 0.85f, h * 0.85f)
-                        lineTo(w * 0.67f, h * 0.85f)
-                        lineTo(w * 0.50f, h * 0.44f)
-                        lineTo(w * 0.33f, h * 0.85f)
-                        lineTo(w * 0.15f, h * 0.85f)
-                        close()
-                    }
-                    drawPath(p, color = LgColors.Gold)
-                    drawCircle(color = LgColors.Turquoise, radius = w * 0.10f, center = Offset(w * 0.50f, h * 0.70f))
-                }
             }
             "ETC" -> {
                 Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.2f)) {
@@ -614,7 +734,7 @@ private fun CustomCoinLogoBadge(
                 }
                 Text(
                     text = initials,
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = fontSp,
                     color = LgColors.GoldBright,
@@ -626,7 +746,198 @@ private fun CustomCoinLogoBadge(
 }
 
 /**
- * Custom vector/Canvas Sports League Logos for NFL, NBA, NHL, MLB, EPL (Soccer), and UFC (MMA).
+ * Unified Gold & Turquoise Coin Dropdown Selector with authentic CoinAvatar logos
+ * in both the collapsed selector button and every dropdown menu row.
+ */
+@Composable
+fun CoinDropdownSelector(
+    selectedSymbol: String,
+    symbols: List<String>,
+    onSelectSymbol: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Select Coin",
+    displayLabelFor: (String) -> String = { sym ->
+        val entry = CoinAssets.find(sym)
+        if (entry != null) "${entry.symbol} · ${entry.name}" else sym
+    },
+    testTag: String = "coin_dropdown_selector"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val distinctSymbols = remember(symbols, selectedSymbol) {
+        (symbols + selectedSymbol).filter { it.isNotBlank() }.distinct()
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            LgColors.PanelSlate.copy(alpha = 0.96f),
+                            LgColors.ElevatedSlate.copy(alpha = 0.92f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.4.dp,
+                    color = if (expanded) LgColors.Turquoise else LgColors.Gold.copy(alpha = 0.72f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .testTag(testTag),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                CoinAvatar(symbol = selectedSymbol, size = 30.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    if (label.isNotBlank()) {
+                        Text(
+                            text = label.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LgColors.Turquoise,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        text = displayLabelFor(selectedSymbol),
+                        fontFamily = RussoOneFontFamily,
+                        fontSize = 14.sp,
+                        letterSpacing = 0.5.sp,
+                        color = LgColors.GoldBright,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = "Open coin dropdown",
+                tint = LgColors.GoldBright,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .heightIn(max = 360.dp)
+                .background(LgColors.PanelSlate)
+                .border(1.4.dp, LgColors.Gold.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+        ) {
+            distinctSymbols.forEach { sym ->
+                val isSelected = sym.equals(selectedSymbol, ignoreCase = true)
+                DropdownMenuItem(
+                    leadingIcon = {
+                        CoinAvatar(symbol = sym, size = 26.dp)
+                    },
+                    text = {
+                        Text(
+                            text = displayLabelFor(sym),
+                            fontFamily = RussoOneFontFamily,
+                            fontSize = 14.sp,
+                            letterSpacing = 0.4.sp,
+                            color = if (isSelected) LgColors.GoldBright else LgColors.InkPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected coin",
+                                tint = LgColors.Turquoise,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else null,
+                    onClick = {
+                        expanded = false
+                        onSelectSymbol(sym)
+                    },
+                    modifier = Modifier
+                        .background(
+                            if (isSelected) LgColors.Turquoise.copy(alpha = 0.16f) else Color.Transparent
+                        )
+                        .testTag("${testTag}_item_$sym")
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Official TradingView geometric TV monogram + wordmark rendered in the bold TradingView logo font.
+ */
+@Composable
+fun TradingViewBrandMark(
+    iconSize: Dp = 20.dp,
+    showWordmark: Boolean = true,
+    tint: Color = LgColors.InkPrimary,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Canvas(modifier = Modifier.size(width = iconSize * 1.45f, height = iconSize)) {
+            val w = size.width
+            val h = size.height
+            // Left T-block of the official TradingView TV mark
+            val tPath = Path().apply {
+                moveTo(w * 0.04f, h * 0.18f)
+                lineTo(w * 0.50f, h * 0.18f)
+                lineTo(w * 0.50f, h * 0.84f)
+                lineTo(w * 0.30f, h * 0.84f)
+                lineTo(w * 0.30f, h * 0.40f)
+                lineTo(w * 0.04f, h * 0.40f)
+                close()
+            }
+            drawPath(tPath, color = tint)
+            // Signature circular dot
+            drawCircle(
+                color = LgColors.Turquoise,
+                radius = h * 0.15f,
+                center = Offset(w * 0.62f, h * 0.32f)
+            )
+            // Signature angled V slash
+            val slashPath = Path().apply {
+                moveTo(w * 0.78f, h * 0.18f)
+                lineTo(w * 0.96f, h * 0.18f)
+                lineTo(w * 0.74f, h * 0.84f)
+                lineTo(w * 0.56f, h * 0.84f)
+                close()
+            }
+            drawPath(slashPath, color = LgColors.GoldBright)
+        }
+        if (showWordmark) {
+            Text(
+                text = "TradingView",
+                fontFamily = TradingViewFontFamily,
+                fontSize = (iconSize.value * 0.72f).sp,
+                letterSpacing = (-0.5).sp,
+                color = tint,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * Loads the actual official high-resolution Sports League logos (NFL, NBA, NHL, MLB, EPL, MLS, UFC)
+ * from ESPN's public league CDN via Coil, falling back cleanly to custom vector crests if offline.
  */
 @Composable
 fun SportsLeagueLogo(
@@ -635,6 +946,56 @@ fun SportsLeagueLogo(
     modifier: Modifier = Modifier
 ) {
     val code = league.trim().uppercase()
+    val officialLogoUrl = when (code) {
+        "NFL" -> "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"
+        "NBA" -> "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png"
+        "NHL" -> "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png"
+        "MLB" -> "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png"
+        "EPL" -> "https://a.espncdn.com/combiner/i?img=/i/leaguelogos/soccer/500/23.png"
+        "MLS" -> "https://a.espncdn.com/i/teamlogos/leagues/500/mls.png"
+        "UFC", "MMA" -> "https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png"
+        "BOXING", "WBC", "WBA" -> null // Use crisp custom Championship Boxing Crest
+        else -> null
+    }
+
+    if (officialLogoUrl != null) {
+        val context = LocalContext.current
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+                .border(1.dp, LgColors.Gold.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                .padding(2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(officialLogoUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "$code official league logo",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    SportsLeagueFallbackCrest(code = code, size = size)
+                },
+                error = {
+                    SportsLeagueFallbackCrest(code = code, size = size)
+                }
+            )
+        }
+    } else {
+        SportsLeagueFallbackCrest(code = code, size = size, modifier = modifier)
+    }
+}
+
+@Composable
+private fun SportsLeagueFallbackCrest(
+    code: String,
+    size: Dp,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
@@ -675,7 +1036,7 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = "NFL",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.30f).sp,
                     color = Color.White,
@@ -713,7 +1074,7 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = "NBA",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.27f).sp,
                     color = Color.White,
@@ -744,7 +1105,7 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = "NHL",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.29f).sp,
                     color = Color.White
@@ -778,7 +1139,7 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = "MLB",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.27f).sp,
                     color = Color.White,
@@ -816,11 +1177,73 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = code,
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.28f).sp,
                     color = Color.White,
                     modifier = Modifier.padding(top = size * 0.36f)
+                )
+            }
+            "BOXING", "WBC", "WBA" -> {
+                // Championship Boxing Ring & Golden Belt Crest
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    // Deep crimson/obsidian championship hexagon ring medallion
+                    val medal = Path().apply {
+                        moveTo(w * 0.50f, h * 0.05f)
+                        lineTo(w * 0.90f, h * 0.24f)
+                        lineTo(w * 0.90f, h * 0.76f)
+                        lineTo(w * 0.50f, h * 0.95f)
+                        lineTo(w * 0.10f, h * 0.76f)
+                        lineTo(w * 0.10f, h * 0.24f)
+                        close()
+                    }
+                    drawPath(medal, color = Color(0xFF1F0A0F))
+                    // 3 boxing ring ropes across upper canvas
+                    for (r in 0..2) {
+                        val ry = h * (0.26f + r * 0.12f)
+                        drawLine(
+                            color = if (r == 1) Color(0xFFD50032) else Color.White.copy(alpha = 0.65f),
+                            start = Offset(w * 0.16f, ry),
+                            end = Offset(w * 0.84f, ry),
+                            strokeWidth = 1.6f
+                        )
+                    }
+                    // Stylized paired crimson/gold boxing gloves at crown
+                    drawCircle(
+                        color = Color(0xFFD50032),
+                        radius = w * 0.12f,
+                        center = Offset(w * 0.39f, h * 0.34f)
+                    )
+                    drawCircle(
+                        color = Color(0xFFE53935),
+                        radius = w * 0.12f,
+                        center = Offset(w * 0.61f, h * 0.34f)
+                    )
+                    drawCircle(
+                        color = LgColors.GoldBright,
+                        radius = w * 0.12f,
+                        center = Offset(w * 0.39f, h * 0.34f),
+                        style = Stroke(width = 1.5f)
+                    )
+                    drawCircle(
+                        color = LgColors.GoldBright,
+                        radius = w * 0.12f,
+                        center = Offset(w * 0.61f, h * 0.34f),
+                        style = Stroke(width = 1.5f)
+                    )
+                    // Championship gold outer trim
+                    drawPath(medal, color = Color(0xFFD50032), style = Stroke(width = 3.0f))
+                    drawPath(medal, color = LgColors.GoldBright, style = Stroke(width = 1.4f))
+                }
+                Text(
+                    text = "BOX",
+                    fontFamily = RussoOneFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = (size.value * 0.26f).sp,
+                    color = LgColors.GoldBright,
+                    modifier = Modifier.padding(top = size * 0.34f)
                 )
             }
             else -> {
@@ -849,7 +1272,7 @@ fun SportsLeagueLogo(
                 }
                 Text(
                     text = "UFC",
-                    fontFamily = ChakraPetchFontFamily,
+                    fontFamily = RussoOneFontFamily,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = (size.value * 0.28f).sp,
                     color = LgColors.GoldBright
@@ -971,3 +1394,358 @@ fun SectionHeader(
         }
     }
 }
+
+/**
+ * Inserts the website / old-app deep oceanic-teal + glowing turquoise & gold circuit-board
+ * background directly behind text boxes and input panels.
+ */
+fun Modifier.circuitTextFieldBackdrop(
+    cornerRadius: Dp = 12.dp,
+    drawBorder: Boolean = true
+): Modifier {
+    val bgA = LgColors.TealAmbient.copy(alpha = 0.92f)
+    val bgB = LgColors.PanelSlate.copy(alpha = 0.96f)
+    val bgC = LgColors.ElevatedSlate.copy(alpha = 0.92f)
+    val glowPrimary = LgColors.Turquoise
+    val glowSecondary = LgColors.Gold
+    return this
+        .clip(RoundedCornerShape(cornerRadius))
+        .background(
+            Brush.horizontalGradient(listOf(bgA, bgB, bgC))
+        )
+        .drawBehind {
+            val w = size.width
+            val h = size.height
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glowPrimary.copy(alpha = 0.18f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.15f, h * 0.5f),
+                    radius = maxOf(w * 0.42f, h * 1.2f)
+                ),
+                center = Offset(w * 0.15f, h * 0.5f),
+                radius = maxOf(w * 0.42f, h * 1.2f)
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glowSecondary.copy(alpha = 0.13f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.88f, h * 0.5f),
+                    radius = maxOf(w * 0.32f, h * 1.1f)
+                ),
+                center = Offset(w * 0.88f, h * 0.5f),
+                radius = maxOf(w * 0.32f, h * 1.1f)
+            )
+            drawCircuitPath(
+                points = listOf(
+                    Offset(w * 0.02f, h * 0.25f),
+                    Offset(w * 0.14f, h * 0.25f),
+                    Offset(w * 0.20f, h * 0.72f)
+                ),
+                color = glowPrimary.copy(alpha = 0.26f),
+                strokeWidth = 1.6f
+            )
+            drawCircuitPath(
+                points = listOf(
+                    Offset(w * 0.98f, h * 0.75f),
+                    Offset(w * 0.85f, h * 0.75f),
+                    Offset(w * 0.78f, h * 0.28f)
+                ),
+                color = glowSecondary.copy(alpha = 0.22f),
+                strokeWidth = 1.5f
+            )
+            if (drawBorder) {
+                val r = cornerRadius.toPx()
+                drawRoundRect(
+                    color = glowSecondary.copy(alpha = 0.35f),
+                    cornerRadius = CornerRadius(r, r),
+                    style = Stroke(width = 1.1f)
+                )
+            }
+        }
+}
+
+/**
+ * Displays an authentic official Exchange Logo beside every exchange title across the app
+ * (Kraken, KuCoin, Coinbase, Bitstamp, Crypto.com, CoinGecko, Binance, All Connected).
+ * Loads crisp high-res official exchange icons via Coil with color-matched vector fallback.
+ */
+@Composable
+fun ExchangeLogo(
+    exchangeName: String,
+    size: Dp = 20.dp,
+    modifier: Modifier = Modifier
+) {
+    val norm = exchangeName.trim().lowercase()
+    val logoUrl = when {
+        norm.contains("kraken") -> "https://www.google.com/s2/favicons?domain=kraken.com&sz=128"
+        norm.contains("kucoin") -> "https://www.google.com/s2/favicons?domain=kucoin.com&sz=128"
+        norm.contains("coinbase") -> "https://www.google.com/s2/favicons?domain=coinbase.com&sz=128"
+        norm.contains("bitstamp") -> "https://www.google.com/s2/favicons?domain=bitstamp.net&sz=128"
+        norm.contains("crypto.com") || norm.contains("cryptocom") -> "https://www.google.com/s2/favicons?domain=crypto.com&sz=128"
+        norm.contains("coingecko") -> "https://www.google.com/s2/favicons?domain=coingecko.com&sz=128"
+        norm.contains("binance") -> "https://www.google.com/s2/favicons?domain=binance.com&sz=128"
+        norm.contains("okx") -> "https://www.google.com/s2/favicons?domain=okx.com&sz=128"
+        norm.contains("bybit") -> "https://www.google.com/s2/favicons?domain=bybit.com&sz=128"
+        else -> null
+    }
+
+    val ringColor = when {
+        norm.contains("kraken") -> Color(0xFF7132F5)
+        norm.contains("kucoin") -> Color(0xFF23AF91)
+        norm.contains("coinbase") -> Color(0xFF0052FF)
+        norm.contains("bitstamp") -> Color(0xFF16A34A)
+        norm.contains("crypto.com") || norm.contains("cryptocom") -> Color(0xFF1199FA)
+        norm.contains("coingecko") -> Color(0xFF8DC63F)
+        norm.contains("binance") -> Color(0xFFF3BA2F)
+        else -> LgColors.Gold
+    }
+
+    if (logoUrl != null) {
+        val context = LocalContext.current
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(Color(0xFF0B1F27))
+                .border(1.1.dp, ringColor.copy(alpha = 0.85f), CircleShape)
+        ) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(logoUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "$exchangeName exchange logo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(1.5.dp)
+                    .clip(CircleShape),
+                loading = { ExchangeLogoFallback(exchangeName, size) },
+                error = { ExchangeLogoFallback(exchangeName, size) }
+            )
+        }
+    } else {
+        ExchangeLogoFallback(exchangeName, size, modifier)
+    }
+}
+
+@Composable
+private fun ExchangeLogoFallback(
+    exchangeName: String,
+    size: Dp,
+    modifier: Modifier = Modifier
+) {
+    val norm = exchangeName.trim().lowercase()
+    val (bg, accent, label) = when {
+        norm.contains("kraken") -> Triple(Color(0xFF3E189C), Color(0xFFA78BFA), "K")
+        norm.contains("kucoin") -> Triple(Color(0xFF0B4F43), Color(0xFF23AF91), "KU")
+        norm.contains("coinbase") -> Triple(Color(0xFF0052FF), Color.White, "C")
+        norm.contains("bitstamp") -> Triple(Color(0xFF0C5A2C), Color(0xFF4ADE80), "B")
+        norm.contains("crypto.com") || norm.contains("cryptocom") -> Triple(Color(0xFF0B2B5C), Color(0xFF38BDF8), "CR")
+        norm.contains("coingecko") -> Triple(Color(0xFF2F5E17), Color(0xFFA3E635), "CG")
+        norm.contains("binance") -> Triple(Color(0xFF5A4206), Color(0xFFF3BA2F), "BN")
+        else -> Triple(Color(0xFF0C3542), LgColors.GoldBright, "ALL")
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(bg)
+            .border(1.dp, accent.copy(alpha = 0.85f), CircleShape)
+    ) {
+        Text(
+            text = label,
+            fontFamily = TradingViewFontFamily,
+            fontSize = (size.value * if (label.length >= 3) 0.28f else if (label.length == 2) 0.36f else 0.46f).sp,
+            color = accent,
+            maxLines = 1
+        )
+    }
+}
+
+enum class SocialPlatform(
+    val label: String,
+    val url: String,
+    val brandBg: Color,
+    val brandAccent: Color
+) {
+    FACEBOOK("Facebook", "https://www.facebook.com/lgdigitalcrypto", Color(0xFF1877F2), Color.White),
+    TELEGRAM("Telegram", "https://t.me/lgdigitalcrypto", Color(0xFF229ED9), Color.White),
+    GOOGLE("Google", "https://accounts.google.com", Color.White, Color(0xFF4285F4)),
+    INSTAGRAM("Instagram", "https://www.instagram.com/lgdigitalcrypto", Color(0xFFE1306C), Color.White),
+    YOUTUBE("YouTube", "https://www.youtube.com/@lgdigitalcrypto", Color(0xFFFF0000), Color.White),
+    WEBSITE("Website", "https://lgdigital.ca", Color(0xFF0B323E), Color(0xFFFFD86B))
+}
+
+@Composable
+fun SocialBrandBadge(
+    platform: SocialPlatform,
+    size: Dp = 26.dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(platform.brandBg)
+            .border(
+                width = 1.dp,
+                color = if (platform == SocialPlatform.GOOGLE) Color(0xFFDADCE0) else platform.brandAccent.copy(alpha = 0.55f),
+                shape = CircleShape
+            )
+    ) {
+        when (platform) {
+            SocialPlatform.FACEBOOK -> {
+                Text(
+                    text = "f",
+                    fontFamily = TradingViewFontFamily,
+                    fontWeight = FontWeight.Black,
+                    fontSize = (size.value * 0.62f).sp,
+                    color = Color.White
+                )
+            }
+            SocialPlatform.GOOGLE -> {
+                Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.16f)) {
+                    val strokeW = maxOf(2.4f, this.size.width * 0.22f)
+                    val inset = strokeW / 2f
+                    val arcSize = Size(this.size.width - strokeW, this.size.height - strokeW)
+                    val topLeft = Offset(inset, inset)
+                    // Red top arc
+                    drawArc(Color(0xFFEA4335), -145f, 100f, false, topLeft, arcSize, style = Stroke(strokeW, cap = StrokeCap.Butt))
+                    // Yellow left arc
+                    drawArc(Color(0xFFFBBC05), 145f, 70f, false, topLeft, arcSize, style = Stroke(strokeW, cap = StrokeCap.Butt))
+                    // Green bottom arc
+                    drawArc(Color(0xFF34A853), 45f, 100f, false, topLeft, arcSize, style = Stroke(strokeW, cap = StrokeCap.Butt))
+                    // Blue right arc + crossbar
+                    drawArc(Color(0xFF4285F4), -10f, 60f, false, topLeft, arcSize, style = Stroke(strokeW, cap = StrokeCap.Butt))
+                    drawLine(
+                        color = Color(0xFF4285F4),
+                        start = Offset(this.size.width * 0.52f, this.size.height * 0.50f),
+                        end = Offset(this.size.width * 0.94f, this.size.height * 0.50f),
+                        strokeWidth = strokeW,
+                        cap = StrokeCap.Butt
+                    )
+                }
+            }
+            SocialPlatform.TELEGRAM -> {
+                Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.20f)) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    val plane = Path().apply {
+                        moveTo(w * 0.95f, h * 0.12f)
+                        lineTo(w * 0.05f, h * 0.48f)
+                        lineTo(w * 0.38f, h * 0.60f)
+                        lineTo(w * 0.78f, h * 0.28f)
+                        lineTo(w * 0.46f, h * 0.66f)
+                        lineTo(w * 0.74f, h * 0.88f)
+                        close()
+                    }
+                    drawPath(plane, color = Color.White)
+                }
+            }
+            SocialPlatform.INSTAGRAM -> {
+                Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.22f)) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    drawRoundRect(
+                        color = Color.White,
+                        cornerRadius = CornerRadius(w * 0.28f, w * 0.28f),
+                        style = Stroke(width = maxOf(1.8f, w * 0.13f))
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = w * 0.22f,
+                        style = Stroke(width = maxOf(1.6f, w * 0.12f))
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = w * 0.07f,
+                        center = Offset(w * 0.76f, h * 0.24f)
+                    )
+                }
+            }
+            SocialPlatform.YOUTUBE -> {
+                Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.26f)) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    val play = Path().apply {
+                        moveTo(w * 0.24f, h * 0.16f)
+                        lineTo(w * 0.86f, h * 0.50f)
+                        lineTo(w * 0.24f, h * 0.84f)
+                        close()
+                    }
+                    drawPath(play, color = Color.White)
+                }
+            }
+            SocialPlatform.WEBSITE -> {
+                Text(
+                    text = "LG",
+                    fontFamily = TradingViewFontFamily,
+                    fontSize = (size.value * 0.38f).sp,
+                    color = LgColors.GoldBright
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Reusable in-app Social Media Links Bar (Facebook, Telegram, Instagram, YouTube, Website)
+ * usable on the Welcome/Sign-In screens, Home Dashboard, Vault, and Walkthrough sheet.
+ */
+@Composable
+fun SocialMediaLinksBar(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    val uriHandler = LocalUriHandler.current
+    val channels = remember {
+        listOf(
+            SocialPlatform.FACEBOOK,
+            SocialPlatform.TELEGRAM,
+            SocialPlatform.INSTAGRAM,
+            SocialPlatform.YOUTUBE,
+            SocialPlatform.WEBSITE
+        )
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        channels.forEach { platform ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = if (compact) 52.dp else 64.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .circuitTextFieldBackdrop(cornerRadius = 12.dp)
+                    .clickable {
+                        runCatching { uriHandler.openUri(platform.url) }
+                    }
+                    .padding(horizontal = 4.dp, vertical = 8.dp)
+                    .testTag("social_link_${platform.name.lowercase()}")
+            ) {
+                SocialBrandBadge(platform = platform, size = if (compact) 24.dp else 28.dp)
+                Text(
+                    text = platform.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LgColors.InkPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+

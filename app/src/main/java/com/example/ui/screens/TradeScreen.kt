@@ -32,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -50,23 +51,34 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.core.CoinAssets
 import com.example.core.Formatters
+import com.example.domain.models.AdaptiveOpportunity
+import com.example.domain.models.BaseFiatCurrency
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.ConnectedExchange
 import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
 import com.example.ui.components.CandlestickChart
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.EquitySparklineChart
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.IndicatorBacktesterView
+import com.example.ui.components.LiveAutoFeedBadge
 import com.example.ui.components.MetricTile
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SignalBadge
 import com.example.ui.components.StatusPill
+import com.example.ui.components.StrategiesHeroChartButton
+import com.example.ui.components.StrategyChartButtonCard
+import com.example.ui.components.TradingViewFullChartDialog
+import com.example.ui.components.TradingViewLiveChartWebView
+import com.example.ui.components.circuitTextFieldBackdrop
 import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TabLabelTextStyle
@@ -76,7 +88,7 @@ import com.example.viewmodel.VaultUiState
 enum class TradeSubWorkspace(val label: String) {
     ORDER("Paper Ticket"),
     BACKTEST("Backtest Lab"),
-    STRATEGIES("11 Strategies")
+    STRATEGIES("Strategies")
 }
 
 @Composable
@@ -94,7 +106,11 @@ fun TradeScreen(
     onToggleAutopilot: (Boolean) -> Unit,
     onUpdateRiskConfig: (RiskProfile, String, Double, Boolean) -> Unit,
     onRunAutopilotTick: () -> Unit,
-    onUpdateIndicatorBacktestConfig: (IndicatorBacktestConfig) -> Unit = {}
+    onUpdateIndicatorBacktestConfig: (IndicatorBacktestConfig) -> Unit = {},
+    onSelectBaseCurrency: (BaseFiatCurrency) -> Unit = {},
+    onSelectConnectedExchange: (ConnectedExchange) -> Unit = {},
+    onScanExchangeMarket: () -> Unit = {},
+    onApplyAdaptiveOpportunity: (AdaptiveOpportunity) -> Unit = {}
 ) {
     var localSubPanel by remember { mutableStateOf(activeWorkspace) }
     val activeSubPanel = if (onSelectWorkspace != null) activeWorkspace else localSubPanel
@@ -150,21 +166,13 @@ fun TradeScreen(
                     state.liveSignal?.let { SignalBadge(it.action) }
                 }
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(CoinAssets.catalog.take(12), key = { it.symbol }) { entry ->
-                        FilterChip(
-                            selected = entry.symbol == state.symbol,
-                            onClick = { onSelectSymbol(entry.symbol) },
-                            leadingIcon = { CoinAvatar(entry.symbol, size = 18.dp) },
-                            label = { Text(entry.symbol) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
-                                selectedLabelColor = LgColors.Gold
-                            ),
-                            modifier = Modifier.testTag("trade_coin_${entry.symbol}")
-                        )
-                    }
-                }
+                CoinDropdownSelector(
+                    selectedSymbol = state.symbol,
+                    symbols = CoinAssets.catalog.map { it.symbol },
+                    onSelectSymbol = onSelectSymbol,
+                    label = "Active Trading Coin",
+                    testTag = "trade_coin_dropdown"
+                )
             }
         }
 
@@ -177,6 +185,7 @@ fun TradeScreen(
                     verticalAlignment = Alignment.Top
                 ) {
                     AdaptiveTraderCard(
+                        tradeState = state,
                         vaultState = vaultState,
                         selectedRisk = selectedRisk,
                         onSelectRisk = { selectedRisk = it },
@@ -198,6 +207,10 @@ fun TradeScreen(
                         },
                         onToggleAutopilot = onToggleAutopilot,
                         onRunTick = onRunAutopilotTick,
+                        onSelectBaseCurrency = onSelectBaseCurrency,
+                        onSelectConnectedExchange = onSelectConnectedExchange,
+                        onScanExchangeMarket = onScanExchangeMarket,
+                        onApplyAdaptiveOpportunity = onApplyAdaptiveOpportunity,
                         modifier = Modifier.weight(1f)
                     )
                     MarketSnapshotCard(
@@ -210,6 +223,7 @@ fun TradeScreen(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     AdaptiveTraderCard(
+                        tradeState = state,
                         vaultState = vaultState,
                         selectedRisk = selectedRisk,
                         onSelectRisk = { selectedRisk = it },
@@ -230,7 +244,11 @@ fun TradeScreen(
                             )
                         },
                         onToggleAutopilot = onToggleAutopilot,
-                        onRunTick = onRunAutopilotTick
+                        onRunTick = onRunAutopilotTick,
+                        onSelectBaseCurrency = onSelectBaseCurrency,
+                        onSelectConnectedExchange = onSelectConnectedExchange,
+                        onScanExchangeMarket = onScanExchangeMarket,
+                        onApplyAdaptiveOpportunity = onApplyAdaptiveOpportunity
                     )
                     MarketSnapshotCard(
                         state = state,
@@ -254,12 +272,18 @@ fun TradeScreen(
             }
         }
 
-        // Desk Sub-Tabs: Paper Ticket | Backtest Lab | 11 Strategies
+        // Chart-Image Button for Strategies + Desk Sub-Tabs
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                StrategiesHeroChartButton(
+                    activeStrategyTitle = state.strategy.title,
+                    isActiveTab = activeSubPanel == TradeSubWorkspace.STRATEGIES,
+                    onClick = { chooseSubPanel(TradeSubWorkspace.STRATEGIES) }
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 TradeSubWorkspace.entries.forEach { panel ->
                     FilterChip(
                         selected = panel == activeSubPanel,
@@ -281,6 +305,7 @@ fun TradeScreen(
                             .weight(1f)
                             .testTag("trade_subtab_${panel.name.lowercase()}")
                     )
+                }
                 }
             }
         }
@@ -322,8 +347,15 @@ fun TradeScreen(
                             onValueChange = { orderAmountText = it.filter { ch -> ch.isDigit() || ch == '.' } },
                             label = { Text("Order Notional (USD)") },
                             singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LgColors.Turquoise,
+                                unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .circuitTextFieldBackdrop(drawBorder = false)
                                 .testTag("paper_order_amount_input")
                         )
                         Row(
@@ -359,28 +391,12 @@ fun TradeScreen(
             TradeSubWorkspace.STRATEGIES -> {
                 items(StrategyType.entries, key = { it.id }) { strat ->
                     val selected = strat == state.strategy
-                    GlassPanelCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectStrategy(strat) },
-                        highlightBorder = if (selected) LgColors.Turquoise.copy(alpha = 0.65f) else LgColors.BorderHairline
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(strat.title, style = MaterialTheme.typography.titleMedium, color = if (selected) LgColors.Turquoise else LgColors.InkPrimary)
-                                Text(strat.summary, style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
-                            }
-                            if (selected) {
-                                state.liveSignal?.let { SignalBadge(it.action) }
-                            }
-                        }
-                    }
+                    StrategyChartButtonCard(
+                        strategy = strat,
+                        selected = selected,
+                        liveAction = if (selected) state.liveSignal?.action else null,
+                        onClick = { onSelectStrategy(strat) }
+                    )
                 }
             }
 
@@ -460,6 +476,7 @@ fun TradeScreen(
 
 @Composable
 private fun AdaptiveTraderCard(
+    tradeState: TradeUiState,
     vaultState: VaultUiState,
     selectedRisk: RiskProfile,
     onSelectRisk: (RiskProfile) -> Unit,
@@ -474,11 +491,100 @@ private fun AdaptiveTraderCard(
     onSaveGuard: () -> Unit,
     onToggleAutopilot: (Boolean) -> Unit,
     onRunTick: () -> Unit,
+    onSelectBaseCurrency: (BaseFiatCurrency) -> Unit,
+    onSelectConnectedExchange: (ConnectedExchange) -> Unit,
+    onScanExchangeMarket: () -> Unit,
+    onApplyAdaptiveOpportunity: (AdaptiveOpportunity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val running = vaultState.account.autopilotRunning
-    CyberFrameCard(title = "ADAPTIVE TRADER", modifier = modifier) {
-        // Center Budget Readout (mirrors $300 USD / Live Budget visual anchor)
+    val fiat = tradeState.baseCurrency
+    val fx = tradeState.usdToCadRate
+
+    CyberFrameCard(title = "ADAPTIVE TRADER · ${fiat.code}", modifier = modifier) {
+        // 1. Base Fiat Currency Switcher (USD / CAD) + Live FX Rate
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "BASE FUNDING CURRENCY",
+                style = MaterialTheme.typography.labelSmall,
+                color = LgColors.Gold
+            )
+            StatusPill(
+                text = "1 USD = ${"%.3f".format(fx)} CAD",
+                color = LgColors.Turquoise
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BaseFiatCurrency.entries.forEach { currency ->
+                val isSelected = currency == fiat
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) LgColors.Turquoise.copy(alpha = 0.22f) else LgColors.ObsidianBg)
+                        .border(
+                            width = if (isSelected) 1.5.dp else 1.dp,
+                            color = if (isSelected) LgColors.GoldBright else LgColors.BorderHairline,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onSelectBaseCurrency(currency) }
+                        .testTag("adaptive_currency_${currency.code.lowercase()}"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = currency.displayLabel,
+                        style = TabLabelTextStyle,
+                        color = if (isSelected) LgColors.GoldBright else LgColors.InkMuted
+                    )
+                }
+            }
+        }
+
+        // 2. Connected Exchange Selector (Whole-Exchange Market Scan Source)
+        Text(
+            text = "CONNECTED EXCHANGE SCANNER",
+            style = MaterialTheme.typography.labelSmall,
+            color = LgColors.Gold
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(ConnectedExchange.entries, key = { it.id }) { ex ->
+                val selected = ex == tradeState.connectedExchange
+                FilterChip(
+                    selected = selected,
+                    onClick = { onSelectConnectedExchange(ex) },
+                    leadingIcon = {
+                        ExchangeLogo(
+                            exchangeName = ex.shortLabel,
+                            size = 18.dp
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = ex.shortLabel,
+                            style = TabLabelTextStyle
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.24f),
+                        selectedLabelColor = LgColors.GoldBright
+                    ),
+                    modifier = Modifier.testTag("adaptive_exchange_${ex.id}")
+                )
+            }
+        }
+
+        // 3. Center Budget Readout in USD or CAD
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -489,23 +595,145 @@ private fun AdaptiveTraderCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(Icons.Filled.Bolt, contentDescription = null, tint = LgColors.Gold)
-                Text("Live Paper Budget", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
+                Text("Live ${fiat.code} Budget", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
                 StatusPill(
                     text = if (running) "ARMED" else "PAUSED",
                     color = if (running) LgColors.Turquoise else LgColors.Gold
                 )
             }
             Text(
-                text = Formatters.formatUsd(selectedRisk.maxDailyNotionalUsd),
+                text = Formatters.formatFiat(selectedRisk.maxDailyNotionalUsd, fiat, fx),
                 style = MaterialTheme.typography.displaySmall,
                 color = LgColors.CyanGlow,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Max Order ${Formatters.formatUsd(selectedRisk.maxOrderUsd)} · Equity ${Formatters.formatUsd(vaultState.totalPortfolioEquityUsd)}",
+                text = "Max Order ${Formatters.formatFiat(selectedRisk.maxOrderUsd, fiat, fx)} · Equity ${Formatters.formatFiat(vaultState.totalPortfolioEquityUsd, fiat, fx)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = LgColors.InkMuted
             )
+        }
+
+        // 4. Whole-Exchange Profit-Optimizing Scanner Results
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(LgColors.ObsidianBg.copy(alpha = 0.90f))
+                .border(1.dp, LgColors.Turquoise.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "EXCHANGE PROFIT OPTIMIZER",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = LgColors.GoldBright
+                    )
+                    Text(
+                        text = if (tradeState.totalExchangeMarketsScanned > 0) {
+                            "Scanned ${tradeState.totalExchangeMarketsScanned} live markets · ${tradeState.venuesScannedLabel}"
+                        } else {
+                            "Scans all pairs on ${tradeState.connectedExchange.displayName}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LgColors.Turquoise
+                    )
+                }
+                OutlinedButton(
+                    onClick = onScanExchangeMarket,
+                    enabled = !tradeState.isScanningExchange,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("scan_entire_exchange_button")
+                ) {
+                    if (tradeState.isScanningExchange) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 6.dp),
+                            strokeWidth = 2.dp,
+                            color = LgColors.GoldBright
+                        )
+                    }
+                    Text(
+                        text = if (tradeState.isScanningExchange) "Scanning..." else "Scan All",
+                        style = TabLabelTextStyle,
+                        color = LgColors.GoldBright
+                    )
+                }
+            }
+
+            if (tradeState.adaptiveOpportunities.isEmpty() && !tradeState.isScanningExchange) {
+                Text(
+                    text = "Tap Scan All to analyze every coin across ${tradeState.connectedExchange.displayName} across all quant strategies.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LgColors.InkSecondary
+                )
+            } else {
+                tradeState.adaptiveOpportunities.take(4).forEachIndexed { idx, opp ->
+                    val isCurrent = opp.symbol == tradeState.symbol && opp.recommendedStrategy == tradeState.strategy
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isCurrent) LgColors.Turquoise.copy(alpha = 0.16f)
+                                else LgColors.PanelSlate.copy(alpha = 0.85f)
+                            )
+                            .border(
+                                width = if (isCurrent) 1.4.dp else 1.dp,
+                                color = if (isCurrent) LgColors.GoldBright else LgColors.BorderHairline,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onApplyAdaptiveOpportunity(opp) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .testTag("adaptive_opp_${opp.symbol}"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            CoinAvatar(opp.symbol, size = 28.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(
+                                        text = "#${idx + 1} ${opp.symbol} ·",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (idx == 0) LgColors.GoldBright else LgColors.InkPrimary
+                                    )
+                                    ExchangeLogo(opp.exchangeName, size = 16.dp)
+                                    Text(
+                                        text = opp.exchangeName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (idx == 0) LgColors.GoldBright else LgColors.InkPrimary
+                                    )
+                                }
+                                Text(
+                                    text = "${opp.recommendedStrategy.title} · ${Formatters.formatFiat(opp.priceUsd, fiat, fx)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LgColors.InkSecondary
+                                )
+                                Text(
+                                    text = "BT ${Formatters.formatPct(opp.backtestReturnPct)} · Win ${opp.winRatePct.toInt()}% · Score ${opp.profitScore.toInt()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (opp.backtestReturnPct >= 0) LgColors.Turquoise else LgColors.Gold
+                                )
+                            }
+                        }
+                        SignalBadge(opp.signalAction)
+                    }
+                }
+            }
         }
 
         // Risk Level LOW / MEDIUM / HIGH pills
@@ -571,7 +799,15 @@ private fun AdaptiveTraderCard(
                 onValueChange = onScheduleChange,
                 label = { Text("Quiet Window (UTC HH:MM-HH:MM)") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LgColors.Turquoise,
+                    unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .circuitTextFieldBackdrop(drawBorder = false)
             )
         }
 
@@ -656,20 +892,20 @@ private fun AdaptiveTraderCard(
             }
         }
 
-        // 3 Mini Bottom Stat Tiles (matches Current Balance / Daily Used / Max Loss Limit)
+        // 3 Mini Bottom Stat Tiles in active USD or CAD funding currency
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MetricTile(
-                label = "Cash Bal",
-                value = Formatters.formatUsd(vaultState.account.usdBalance),
+                label = "${fiat.code} Cash",
+                value = Formatters.formatFiat(vaultState.account.usdBalance, fiat, fx),
                 valueColor = LgColors.CyanGlow,
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
                 label = "Daily Used",
-                value = Formatters.formatUsd(vaultState.account.dailyNotionalUsedUsd),
+                value = Formatters.formatFiat(vaultState.account.dailyNotionalUsedUsd, fiat, fx),
                 valueColor = LgColors.Turquoise,
                 modifier = Modifier.weight(1f)
             )
@@ -690,7 +926,50 @@ private fun MarketSnapshotCard(
     onSelectOverlay: (ChartOverlay) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    CyberFrameCard(title = "MARKET SNAPSHOT", modifier = modifier) {
+    var useTradingViewLive by remember { mutableStateOf(false) }
+    var showFullTv by remember { mutableStateOf(false) }
+
+    if (showFullTv) {
+        TradingViewFullChartDialog(
+            symbol = state.symbol,
+            onDismiss = { showFullTv = false }
+        )
+    }
+
+    CyberFrameCard(title = "MARKET SNAPSHOT · LIVE CHART", modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LiveAutoFeedBadge(label = "LIVE FEED")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = !useTradingViewLive,
+                    onClick = { useTradingViewLive = false },
+                    label = { Text("OHLC", style = TabLabelTextStyle) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
+                        selectedLabelColor = LgColors.Gold
+                    )
+                )
+                FilterChip(
+                    selected = useTradingViewLive,
+                    onClick = { useTradingViewLive = true },
+                    label = { Text("TRADINGVIEW", style = TabLabelTextStyle) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LgColors.Turquoise.copy(alpha = 0.22f),
+                        selectedLabelColor = LgColors.Gold
+                    )
+                )
+                FilterChip(
+                    selected = false,
+                    onClick = { showFullTv = true },
+                    label = { Text("FULL", style = TabLabelTextStyle, color = LgColors.Gold) }
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -699,42 +978,58 @@ private fun MarketSnapshotCard(
                 FilterChip(
                     selected = tf == state.timeframe,
                     onClick = { onSelectTimeframe(tf) },
-                    label = { Text(tf.label) },
+                    label = { Text(tf.label, style = TabLabelTextStyle) },
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(ChartOverlay.entries) { ov ->
-                FilterChip(
-                    selected = ov == state.overlay,
-                    onClick = { onSelectOverlay(ov) },
-                    label = { Text(ov.label) }
-                )
+        if (!useTradingViewLive) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(ChartOverlay.entries) { ov ->
+                    FilterChip(
+                        selected = ov == state.overlay,
+                        onClick = { onSelectOverlay(ov) },
+                        label = { Text(ov.label) }
+                    )
+                }
             }
         }
 
-        when (val cs = state.candlesState) {
-            is UiState.Loading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = LgColors.Turquoise)
+        if (useTradingViewLive) {
+            val tvInterval = when (state.timeframe) {
+                ChartTimeframe.M15 -> "15"
+                ChartTimeframe.H1 -> "60"
+                ChartTimeframe.H4 -> "240"
+                ChartTimeframe.D1 -> "D"
+            }
+            TradingViewLiveChartWebView(
+                symbol = state.symbol,
+                interval = tvInterval,
+                height = 290.dp
+            )
+        } else {
+            when (val cs = state.candlesState) {
+                is UiState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = LgColors.Turquoise)
+                    }
                 }
-            }
-            is UiState.Error -> {
-                Text(
-                    text = "Chart error: ${cs.message}",
-                    color = LgColors.Crimson,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            is UiState.Success -> {
-                CandlestickChart(candles = cs.data, overlay = state.overlay)
+                is UiState.Error -> {
+                    Text(
+                        text = "Chart error: ${cs.message}",
+                        color = LgColors.Crimson,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                is UiState.Success -> {
+                    CandlestickChart(candles = cs.data, overlay = state.overlay)
+                }
             }
         }
 

@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,11 +53,14 @@ import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
 import com.example.domain.models.UiState
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.MetricTile
 import com.example.ui.components.StatusPill
+import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.graphics.Color
@@ -173,9 +177,9 @@ fun LabsScreen(
                     }
 
                     LabsTool.MINING -> {
-                        // Miner Status Card (clean 16:9 Miner Rig fit, no AE2 branding)
+                        // Universal Multi-Coin / Multi-Rig Miner Status Card
                         item {
-                            CyberFrameCard(title = "MINER STATUS") {
+                            CyberFrameCard(title = "UNIVERSAL MINER HUB") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -187,15 +191,15 @@ fun LabsScreen(
                                 ) {
                                     Image(
                                         painter = painterResource(id = R.drawable.img_miner_rig),
-                                        contentDescription = "Crypto Miner Hardware Rig",
+                                        contentDescription = "Universal Crypto Miner Hardware Rig",
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    MetricTile("Hardware", "ASIC Miner", LgColors.Gold, Modifier.weight(1f))
-                                    MetricTile("Hashrate", "720 MH/s", LgColors.Turquoise, Modifier.weight(1f))
-                                    MetricTile("Power", "1300W", LgColors.CyanGlow, Modifier.weight(1f))
+                                    MetricTile("Hardware", "Any ASIC / GPU", LgColors.Gold, Modifier.weight(1f))
+                                    MetricTile("Algorithms", "Multi-Algo", LgColors.Turquoise, Modifier.weight(1f))
+                                    MetricTile("Coverage", "All PoW Coins", LgColors.CyanGlow, Modifier.weight(1f))
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -203,8 +207,8 @@ fun LabsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text("CoinSpectrum PoW Live Quotes", style = MaterialTheme.typography.titleMedium)
-                                        Text("Data courtesy of CoinSpectrum (CC BY 4.0)", style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted)
+                                        Text("Multi-Coin PoW Live Quotes", style = MaterialTheme.typography.titleMedium)
+                                        Text("Universal miner profitability & network difficulty across all supported PoW coins", style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted)
                                     }
                                     Button(
                                         onClick = onRefreshMining,
@@ -261,6 +265,17 @@ fun LabsScreen(
                     LabsTool.BREAKOUT -> {
                         item {
                             CyberFrameCard(title = "BREAKOUT WATCH") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ExchangeLogo("Kraken", size = 22.dp)
+                                    Text(
+                                        text = "Kraken Live 1h Order Books",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = LgColors.Turquoise
+                                    )
+                                }
                                 GoldMetallicButton(
                                     text = if (state.breakoutLoading) "Scanning Kraken 1h Books..." else "Run 20-Bar Breakout Scan",
                                     onClick = onScanBreakouts,
@@ -336,16 +351,13 @@ fun LabsScreen(
 
                         if (!showDexSub) {
                             item {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    items(CoinAssets.catalog.take(10)) { c ->
-                                        FilterChip(
-                                            selected = c.symbol == state.researchSymbol,
-                                            onClick = { onAnalyzeResearch(c.symbol) },
-                                            leadingIcon = { CoinAvatar(c.symbol, size = 18.dp) },
-                                            label = { Text(c.symbol) }
-                                        )
-                                    }
-                                }
+                                CoinDropdownSelector(
+                                    selectedSymbol = state.researchSymbol,
+                                    symbols = CoinAssets.catalog.map { it.symbol },
+                                    onSelectSymbol = onAnalyzeResearch,
+                                    label = "24h Quant Research Coin",
+                                    testTag = "research_coin_dropdown"
+                                )
                             }
                             when (val rs = state.researchProjection) {
                                 is UiState.Loading -> item {
@@ -414,7 +426,15 @@ fun LabsScreen(
                                         onValueChange = { dexQueryInput = it },
                                         label = { Text("Token or pair (e.g. SOL, PEPE, HYPE)") },
                                         singleLine = true,
-                                        modifier = Modifier.weight(1f)
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = LgColors.Turquoise,
+                                            unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .circuitTextFieldBackdrop(drawBorder = false)
                                     )
                                     Button(
                                         onClick = { onSearchDex(dexQueryInput) },

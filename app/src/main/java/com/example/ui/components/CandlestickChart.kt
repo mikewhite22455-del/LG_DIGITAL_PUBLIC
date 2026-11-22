@@ -90,8 +90,8 @@ fun CandlestickChart(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF070E1A))
-            .border(1.dp, LgColors.BorderHairline, RoundedCornerShape(14.dp))
+            .background(LgColors.ObsidianBg.copy(alpha = 0.92f))
+            .border(1.2.dp, LgColors.Gold.copy(alpha = 0.42f), RoundedCornerShape(14.dp))
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -283,8 +283,8 @@ fun EquitySparklineChart(
             .fillMaxWidth()
             .height(92.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF070E1A))
-            .border(1.dp, LgColors.BorderHairline.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+            .background(LgColors.ObsidianBg.copy(alpha = 0.92f))
+            .border(1.dp, LgColors.Gold.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
             .padding(8.dp)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {

@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.core.BiometricAuthManager
 import com.example.core.BiometricCapability
+import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.LgCircuitBackground
 import com.example.ui.components.StatusPill
@@ -163,19 +164,16 @@ fun BiometricLockScreen(
                     .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                ElevatedCard(
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
+                CyberFrameCard(
+                    title = "LG DIGITAL VAULT",
                     modifier = Modifier
                         .fillMaxWidth()
                         .widthIn(max = 460.dp)
-                        .border(1.5.dp, LgColors.Gold.copy(alpha = 0.65f), MaterialTheme.shapes.large)
                 ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {

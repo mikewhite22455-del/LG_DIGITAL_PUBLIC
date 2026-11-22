@@ -25,13 +25,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Color
 import com.example.core.Formatters
 import com.example.domain.engine.CalculatorsEngine
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.MetricTile
 import com.example.ui.components.SportsLeagueLogo
 import com.example.ui.components.StatusPill
+import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TabLabelTextStyle
 
@@ -52,7 +56,8 @@ private val sportCategories = listOf(
     SportCategoryPreset("Hockey", "NHL", "TOR vs EDM · Puck Line", "2.25", "1.96", "51.5", "3.2", "2.7"),
     SportCategoryPreset("Baseball", "MLB", "NYY vs LAD · F5 Run Line", "2.10", "2.04", "52.5", "2.6", "2.1"),
     SportCategoryPreset("Soccer", "EPL", "ARS vs MCI · Asian Hcp", "2.15", "2.06", "54.0", "1.65", "1.15"),
-    SportCategoryPreset("MMA", "UFC", "Main Card · Method/ML", "2.30", "1.92", "49.5", "1.4", "1.1")
+    SportCategoryPreset("MMA", "UFC", "Main Card · Method/ML", "2.30", "1.92", "49.5", "1.4", "1.1"),
+    SportCategoryPreset("Boxing", "BOXING", "Championship Bout · 12 Rds ML/KO", "2.22", "1.98", "53.0", "1.5", "1.2")
 )
 
 @Composable
@@ -176,27 +181,36 @@ fun SportsCalculatorsSection() {
                     label = { Text("Standard -110 Vig") }
                 )
             }
+            val circuitFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LgColors.Turquoise,
+                unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = arbOddsA,
                     onValueChange = { arbOddsA = it },
                     label = { Text("Odds A") },
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    colors = circuitFieldColors,
+                    modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false)
                 )
                 OutlinedTextField(
                     value = arbOddsB,
                     onValueChange = { arbOddsB = it },
                     label = { Text("Odds B") },
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    colors = circuitFieldColors,
+                    modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false)
                 )
                 OutlinedTextField(
                     value = arbStake,
                     onValueChange = { arbStake = it },
                     label = { Text("Stake $") },
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    colors = circuitFieldColors,
+                    modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false)
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,10 +235,16 @@ fun SportsCalculatorsSection() {
 
         // 3. Bankroll & Kelly Sizing
         CyberFrameCard(title = "BANKROLL & KELLY SIZING") {
+            val kellyFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LgColors.Turquoise,
+                unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = kellyOdds, onValueChange = { kellyOdds = it }, label = { Text("Odds") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = kellyWinPct, onValueChange = { kellyWinPct = it }, label = { Text("Win %") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = kellyBankroll, onValueChange = { kellyBankroll = it }, label = { Text("Bankroll") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = kellyOdds, onValueChange = { kellyOdds = it }, label = { Text("Odds") }, singleLine = true, colors = kellyFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = kellyWinPct, onValueChange = { kellyWinPct = it }, label = { Text("Win %") }, singleLine = true, colors = kellyFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = kellyBankroll, onValueChange = { kellyBankroll = it }, label = { Text("Bankroll") }, singleLine = true, colors = kellyFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0.25 to "1/4 Kelly", 0.5 to "1/2 Kelly", 1.0 to "Full Kelly").forEach { (f, lbl) ->
@@ -245,9 +265,15 @@ fun SportsCalculatorsSection() {
 
         // 4. Poisson Match Simulator
         CyberFrameCard(title = "POISSON SCORELINE MATRIX") {
+            val poisFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LgColors.Turquoise,
+                unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = poisHome, onValueChange = { poisHome = it }, label = { Text("Home xG") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = poisAway, onValueChange = { poisAway = it }, label = { Text("Away xG") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = poisHome, onValueChange = { poisHome = it }, label = { Text("Home xG") }, singleLine = true, colors = poisFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = poisAway, onValueChange = { poisAway = it }, label = { Text("Away xG") }, singleLine = true, colors = poisFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("Home Win", "${"%.1f".format(pois.homeWinPct)}%", LgColors.Turquoise, Modifier.weight(1f))
@@ -265,9 +291,9 @@ fun SportsCalculatorsSection() {
 
 @Composable
 fun EarnAndRiskCalculatorsSection() {
-    var selectedPool by remember { mutableStateOf("ALEO") }
+    var selectedPool by remember { mutableStateOf("SOL") }
     var principal by remember { mutableStateOf("5000") }
-    var apr by remember { mutableStateOf("12.4") }
+    var apr by remember { mutableStateOf("7.4") }
     var years by remember { mutableStateOf("2") }
 
     var lpInitial by remember { mutableStateOf("2000") }
@@ -277,6 +303,26 @@ fun EarnAndRiskCalculatorsSection() {
     var riskPct by remember { mutableStateOf("1.5") }
     var entryPx by remember { mutableStateOf("86500") }
     var stopPx by remember { mutableStateOf("83900") }
+
+    val stakingRates = remember {
+        mapOf(
+            "SOL" to "7.4",
+            "ETH" to "3.8",
+            "DOT" to "11.5",
+            "AVAX" to "8.1",
+            "ADA" to "4.2",
+            "USDT" to "8.2",
+            "USDC" to "6.5",
+            "BTC" to "2.5"
+        )
+    }
+
+    val circuitFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = LgColors.Turquoise,
+        unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent
+    )
 
     val apy = CalculatorsEngine.calculateCompoundApy(
         principal.toDoubleOrNull() ?: 0.0,
@@ -296,20 +342,31 @@ fun EarnAndRiskCalculatorsSection() {
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Staking & Earn Yields with Coin Logos
+        // Universal Multi-Coin Staking & Earn Yields with Coin Logos
         CyberFrameCard(title = "STAKING & EARN YIELDS") {
+            CoinDropdownSelector(
+                selectedSymbol = if (selectedPool == "CUSTOM") "SOL" else selectedPool,
+                symbols = stakingRates.keys.toList(),
+                onSelectSymbol = { sym ->
+                    selectedPool = sym
+                    apr = stakingRates[sym] ?: "6.0"
+                },
+                label = "Select Any Staking Coin",
+                displayLabelFor = { sym -> "$sym Pool · ${stakingRates[sym] ?: "6.0"}% APR" },
+                testTag = "staking_coin_dropdown"
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 StakingPoolCard(
-                    symbol = "ALEO",
-                    poolName = "ALEO POOL",
-                    aprText = "12.4%",
-                    selected = selectedPool == "ALEO",
+                    symbol = "SOL",
+                    poolName = "SOL POOL",
+                    aprText = "7.4%",
+                    selected = selectedPool == "SOL",
                     onClick = {
-                        selectedPool = "ALEO"
-                        apr = "12.4"
+                        selectedPool = "SOL"
+                        apr = "7.4"
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -326,9 +383,9 @@ fun EarnAndRiskCalculatorsSection() {
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = principal, onValueChange = { principal = it }, label = { Text("Principal $") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = apr, onValueChange = { apr = it; selectedPool = "CUSTOM" }, label = { Text("APR %") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = years, onValueChange = { years = it }, label = { Text("Years") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = principal, onValueChange = { principal = it }, label = { Text("Principal $") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = apr, onValueChange = { apr = it; selectedPool = "CUSTOM" }, label = { Text("APR %") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = years, onValueChange = { years = it }, label = { Text("Years") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("Eff. APY", "${"%.2f".format(apy.effectiveApyPct)}%", LgColors.Turquoise, Modifier.weight(1f))
@@ -340,12 +397,12 @@ fun EarnAndRiskCalculatorsSection() {
         // Position Risk Sizer
         CyberFrameCard(title = "POSITION RISK SIZER") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = riskBal, onValueChange = { riskBal = it }, label = { Text("Account $") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = riskPct, onValueChange = { riskPct = it }, label = { Text("Risk %") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = riskBal, onValueChange = { riskBal = it }, label = { Text("Account $") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = riskPct, onValueChange = { riskPct = it }, label = { Text("Risk %") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = entryPx, onValueChange = { entryPx = it }, label = { Text("Entry $") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = stopPx, onValueChange = { stopPx = it }, label = { Text("Stop $") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = entryPx, onValueChange = { entryPx = it }, label = { Text("Entry $") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = stopPx, onValueChange = { stopPx = it }, label = { Text("Stop $") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("Max Risk", Formatters.formatUsd(rSize.riskAmountUsd), LgColors.Crimson, Modifier.weight(1f))
@@ -362,8 +419,8 @@ fun EarnAndRiskCalculatorsSection() {
         // 50/50 LP Impermanent Loss
         CyberFrameCard(title = "50/50 LP IMPERMANENT LOSS") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = lpInitial, onValueChange = { lpInitial = it }, label = { Text("LP Deposit $") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = priceRatio, onValueChange = { priceRatio = it }, label = { Text("Price Mult (e.g. 2.0)") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = lpInitial, onValueChange = { lpInitial = it }, label = { Text("LP Deposit $") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
+                OutlinedTextField(value = priceRatio, onValueChange = { priceRatio = it }, label = { Text("Price Mult (e.g. 2.0)") }, singleLine = true, colors = circuitFieldColors, modifier = Modifier.weight(1f).circuitTextFieldBackdrop(drawBorder = false))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricTile("IL Impact", "${"%.2f".format(il.ilPct)}%", LgColors.Crimson, Modifier.weight(1f))

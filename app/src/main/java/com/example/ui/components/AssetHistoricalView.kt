@@ -99,18 +99,14 @@ fun AssetHistoricalView(
         (listOf(symbol) + quickSymbols).distinct()
     }
 
-    ElevatedCard(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+    CyberFrameCard(
+        title = "HISTORICAL PERFORMANCE · $symbol",
         modifier = modifier
             .fillMaxWidth()
             .testTag("asset_historical_view_$symbol")
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header: Asset Identity + Active/Scrubbed Price & Window Delta
@@ -172,27 +168,15 @@ fun AssetHistoricalView(
                 }
             }
 
-            // Asset quick selector chips
+            // Asset selector dropdown with coin logos
             if (showAssetSelector && selectableSymbols.size > 1) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(selectableSymbols, key = { it }) { sym ->
-                        val selected = sym == symbol
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onSelectSymbol(sym) },
-                            leadingIcon = { CoinAvatar(symbol = sym, size = 18.dp) },
-                            label = { Text(sym, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier.testTag("history_asset_$sym")
-                        )
-                    }
-                }
+                CoinDropdownSelector(
+                    selectedSymbol = symbol,
+                    symbols = selectableSymbols,
+                    onSelectSymbol = onSelectSymbol,
+                    label = "Chart Coin",
+                    testTag = "history_asset_dropdown"
+                )
             }
 
             // 1H / 24H / 7D Material 3 Segmented Toggle
@@ -229,8 +213,8 @@ fun AssetHistoricalView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(LgColors.ObsidianBg.copy(alpha = 0.88f))
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
+                    .background(LgColors.ObsidianBg.copy(alpha = 0.92f))
+                    .border(1.2.dp, LgColors.Gold.copy(alpha = 0.42f), RoundedCornerShape(14.dp))
                     .padding(12.dp)
             ) {
                 when (historyState) {
@@ -360,20 +344,13 @@ fun AssetHistoricalView(
             }
 
             if (onOpenInTrade != null) {
-                FilledTonalButton(
+                GoldMetallicButton(
+                    text = "Open $symbol in Trade & Backtest",
                     onClick = { onOpenInTrade(symbol) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
                         .testTag("history_open_trade_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CandlestickChart,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp).size(18.dp)
-                    )
-                    Text("Open $symbol in Trade & Backtest Terminal")
-                }
+                )
             }
         }
     }
@@ -526,7 +503,7 @@ private fun HistoricalAreaChartCanvas(
                     center = focusPt
                 )
                 drawCircle(
-                    color = Color(0xFF070E1A),
+                    color = LgColors.ObsidianBg,
                     radius = 6f,
                     center = focusPt
                 )

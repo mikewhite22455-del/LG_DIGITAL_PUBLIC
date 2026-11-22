@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SupportAgent
@@ -40,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -51,13 +55,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.core.BiometricAuthManager
@@ -65,13 +70,18 @@ import com.example.core.BiometricCapability
 import com.example.core.Formatters
 import com.example.data.local.PayoutRuleEntity
 import com.example.ui.components.CoinAvatar
+import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.MetricTile
 import com.example.ui.components.SectionHeader
+import com.example.ui.components.SocialMediaLinksBar
 import com.example.ui.components.StatusPill
+import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
+import com.example.ui.theme.LgThemeState
 import com.example.viewmodel.VaultUiState
 
 @Composable
@@ -89,11 +99,23 @@ fun VaultScreen(
     autoLockOnBackground: Boolean = true,
     onToggleBiometricLock: (Boolean) -> Unit = {},
     onToggleAutoLockBackground: (Boolean) -> Unit = {},
-    onLockDashboardNow: () -> Unit = {}
+    onLockDashboardNow: () -> Unit = {},
+    memberSession: MemberSession? = null,
+    onOpenWelcomeSignIn: (showSignIn: Boolean) -> Unit = {},
+    membershipProfile: MembershipBillingProfile = MembershipBillingProfile(),
+    onOpenMembershipBilling: () -> Unit = {},
+    activeThemeName: String = LgThemeState.activeTheme.displayName,
+    onOpenThemePreviews: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val biometricCapability = remember { BiometricAuthManager.checkCapability(context) }
     val rule = vaultState.payoutRule
+    val circuitFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = LgColors.Turquoise,
+        unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent
+    )
     var autoSweepText by remember(rule.autoSweepUsd) { mutableStateOf(rule.autoSweepUsd.toInt().toString()) }
     var targetCoin by remember(rule.targetCoin) { mutableStateOf(rule.targetCoin) }
     var minPayoutText by remember(rule.minPayoutThresholdUsd) { mutableStateOf(rule.minPayoutThresholdUsd.toInt().toString()) }
@@ -179,7 +201,10 @@ fun VaultScreen(
                                 onValueChange = { priceInput = it.filter { ch -> ch.isDigit() || ch == '.' } },
                                 label = { Text("Target USD") },
                                 singleLine = true,
-                                modifier = Modifier.weight(1f)
+                                colors = circuitFieldColors,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .circuitTextFieldBackdrop(drawBorder = false)
                             )
                             IconButton(
                                 onClick = {
@@ -212,29 +237,30 @@ fun VaultScreen(
                         onValueChange = { autoSweepText = it.filter { ch -> ch.isDigit() || ch == '.' } },
                         label = { Text("Auto-Sweep $") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        colors = circuitFieldColors,
+                        modifier = Modifier
+                            .weight(1f)
+                            .circuitTextFieldBackdrop(drawBorder = false)
                     )
                     OutlinedTextField(
                         value = minPayoutText,
                         onValueChange = { minPayoutText = it.filter { ch -> ch.isDigit() || ch == '.' } },
                         label = { Text("Min Payout $") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        colors = circuitFieldColors,
+                        modifier = Modifier
+                            .weight(1f)
+                            .circuitTextFieldBackdrop(drawBorder = false)
                     )
                 }
 
-                Text("Target Settlement Coin", style = MaterialTheme.typography.labelMedium, color = LgColors.InkSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("BTC", "ETH", "SOL", "USDC").forEach { coin ->
-                        FilterChip(
-                            selected = targetCoin == coin,
-                            onClick = { targetCoin = coin },
-                            leadingIcon = { CoinAvatar(coin, size = 18.dp) },
-                            label = { Text(coin) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+                CoinDropdownSelector(
+                    selectedSymbol = targetCoin,
+                    symbols = listOf("BTC", "ETH", "SOL", "USDC", "USDT", "XRP", "LTC"),
+                    onSelectSymbol = { targetCoin = it },
+                    label = "Target Settlement Coin",
+                    testTag = "vault_settlement_coin_dropdown"
+                )
 
                 GoldMetallicButton(
                     text = "SAVE PAYOUT RULE",
@@ -263,8 +289,25 @@ fun VaultScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Kraken · Coinbase · Bitstamp · KuCoin", style = MaterialTheme.typography.titleMedium)
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            ExchangeLogo("Kraken", size = 18.dp)
+                            Text("Kraken", style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary)
+                            ExchangeLogo("Coinbase", size = 18.dp)
+                            Text("Coinbase", style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary)
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            ExchangeLogo("Bitstamp", size = 18.dp)
+                            Text("Bitstamp", style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary)
+                            ExchangeLogo("KuCoin", size = 18.dp)
+                            Text("KuCoin", style = MaterialTheme.typography.labelLarge, color = LgColors.InkPrimary)
+                        }
                         Text("Read-Only Public Order Books & Feeds", style = MaterialTheme.typography.labelSmall, color = LgColors.InkSecondary)
                     }
                     StatusPill("Active", LgColors.Turquoise)
@@ -467,19 +510,53 @@ fun VaultScreen(
                         color = LgColors.InkSecondary
                     )
                 }
-                OutlinedTextField(value = walletLabel, onValueChange = { walletLabel = it }, label = { Text("Label (e.g. Ledger Main)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Bitcoin" to "BTC", "Ethereum" to "ETH", "Solana" to "SOL").forEach { (net, sym) ->
-                        FilterChip(
-                            selected = walletNetwork == net,
-                            onClick = { walletNetwork = net },
-                            leadingIcon = { CoinAvatar(sym, size = 18.dp) },
-                            label = { Text(net) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                OutlinedTextField(
+                    value = walletLabel,
+                    onValueChange = { walletLabel = it },
+                    label = { Text("Label (e.g. Ledger Main)") },
+                    singleLine = true,
+                    colors = circuitFieldColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .circuitTextFieldBackdrop(drawBorder = false)
+                )
+                val networkSym = when (walletNetwork) {
+                    "Bitcoin" -> "BTC"
+                    "Ethereum" -> "ETH"
+                    "Solana" -> "SOL"
+                    else -> "ETH"
                 }
-                OutlinedTextField(value = walletAddress, onValueChange = { walletAddress = it }, label = { Text("Public Address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                CoinDropdownSelector(
+                    selectedSymbol = networkSym,
+                    symbols = listOf("BTC", "ETH", "SOL"),
+                    onSelectSymbol = { sym ->
+                        walletNetwork = when (sym) {
+                            "BTC" -> "Bitcoin"
+                            "SOL" -> "Solana"
+                            else -> "Ethereum"
+                        }
+                    },
+                    label = "Cold Wallet Coin / Network",
+                    displayLabelFor = { sym ->
+                        when (sym) {
+                            "BTC" -> "BTC · Bitcoin Network"
+                            "ETH" -> "ETH · Ethereum Network"
+                            "SOL" -> "SOL · Solana Network"
+                            else -> sym
+                        }
+                    },
+                    testTag = "vault_wallet_network_dropdown"
+                )
+                OutlinedTextField(
+                    value = walletAddress,
+                    onValueChange = { walletAddress = it },
+                    label = { Text("Public Address") },
+                    singleLine = true,
+                    colors = circuitFieldColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .circuitTextFieldBackdrop(drawBorder = false)
+                )
                 Button(
                     onClick = {
                         onAddWatchWallet(walletLabel, walletNetwork, walletAddress)
@@ -549,6 +626,92 @@ fun VaultScreen(
                 )
             }
         }
+
+        // 6. Member Session, Membership & Billing, Welcome Screen & Social Media Links
+        item {
+            CyberFrameCard(title = "MEMBERSHIP, BILLING & SOCIAL") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = memberSession?.let { "${it.displayName} (${it.provider})" } ?: "LG Digital Member",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = LgColors.GoldBright
+                        )
+                        Text(
+                            text = if (membershipProfile.isEnrolled) {
+                                "Plan: ${membershipProfile.tier.title} (${membershipProfile.billingCycle.label}) · ID ${membershipProfile.memberId}"
+                            } else {
+                                memberSession?.handleOrEmail?.ifBlank { "Sign up for Pro or Elite membership" }
+                                    ?: "Sign in with Google, Facebook, or Telegram"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LgColors.InkSecondary
+                        )
+                    }
+                    StatusPill(
+                        text = membershipProfile.tier.title.uppercase(),
+                        color = if (membershipProfile.tier == MembershipTier.STARTER) LgColors.Turquoise else LgColors.GoldBright
+                    )
+                }
+                GoldMetallicButton(
+                    text = if (membershipProfile.isEnrolled) "MANAGE MEMBERSHIP & BILLING" else "MEMBERSHIP SIGN-UP & BILLING",
+                    onClick = onOpenMembershipBilling,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("vault_open_membership_billing_button")
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onOpenWelcomeSignIn(false) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("vault_open_welcome_button")
+                    ) {
+                        Text("Welcome Screen", maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = { onOpenWelcomeSignIn(true) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("vault_open_signin_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp).padding(end = 4.dp))
+                        Text("Sign In / Switch", maxLines = 1)
+                    }
+                }
+                OutlinedButton(
+                    onClick = onOpenThemePreviews,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("vault_open_theme_previews_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Palette,
+                        contentDescription = null,
+                        tint = LgColors.GoldBright,
+                        modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                    )
+                    Text(
+                        text = "Color Theme: $activeThemeName · 8 Previews",
+                        color = LgColors.GoldBright,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text("CONNECT ON SOCIAL MEDIA", style = MaterialTheme.typography.labelMedium, color = LgColors.Gold)
+                SocialMediaLinksBar(compact = false)
+            }
+        }
     }
 }
 
@@ -607,12 +770,13 @@ fun HelpWalkthroughContent(
     onAskAiHelp: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val uriHandler = LocalUriHandler.current
     var walkthroughStep by remember { mutableStateOf(0) }
     val steps = remember {
         listOf(
-            "1. Home & Live Market Overview" to "Tap any coin in Home to inspect 24h range, launch Candlestick charts, or scan cross-exchange arbitrage spreads.",
-            "2. Adaptive Autopilot & Risk Guard" to "Pick LOW / MEDIUM / HIGH risk sizing, configure quiet stop hours and Max DD guard, then arm or test individual ticks in Trade.",
-            "3. AI Advisor & Quant Labs" to "Use Quant Labs for Sports Leagues Edge, Kelly Sizing, ALEO/USDT Earn yields, Miner status, and ask the AI Advisor anything about live telemetry."
+            "1. Home & Live Market Overview" to "Inspect the Live Crypto Fear & Greed Index, TradingView feeds, 24h range, and scan cross-exchange arbitrage spreads.",
+            "2. Adaptive USD/CAD Trader" to "Select USD or CAD funding and your connected exchange (Kraken, KuCoin, Coinbase, Bitstamp). Adaptive Trader scans the entire exchange to optimize profit.",
+            "3. AI Advisor & Universal Quant Labs" to "Use Quant Labs for Official Sports Leagues Edge, Multi-Coin Staking & Earn yields, Universal ASIC/GPU Miner telemetry for any coin, and AI Copilot."
         )
     }
 
@@ -622,7 +786,7 @@ fun HelpWalkthroughContent(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Card 1: CONTACT (matches Image 2 left)
+        // Card 1: CONTACT
         CyberFrameCard(title = "CONTACT") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -637,26 +801,27 @@ fun HelpWalkthroughContent(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text("LG Digital Desk Support", style = MaterialTheme.typography.titleMedium, color = LgColors.InkPrimary)
-                    Text("Public Read-Only Exchange Connectors · Local SQLite Ledger", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
+                    Text("Public Read-Only Exchange Connectors · Universal Miner & Coin Desk", style = MaterialTheme.typography.bodyMedium, color = LgColors.InkSecondary)
                 }
             }
+            SocialMediaLinksBar(compact = true)
         }
 
-        // Card 2: WALKTHROUGH (matches Image 2 center with robot portrait)
-        CyberFrameCard(title = "WALKTHROUGH") {
+        // Card 2: DIGITAL WALKTHROUGH (with robot portrait + website walkthrough link)
+        CyberFrameCard(title = "DIGITAL WALKTHROUGH") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.img_user_walkthrough_bot),
+                    painter = painterResource(id = R.drawable.img_walkthrough_bot),
                     contentDescription = "LG Digital interactive walkthrough guide",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(72.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, LgColors.CyanGlow.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                        .border(1.5.dp, LgColors.Gold.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(steps[walkthroughStep].first, style = MaterialTheme.typography.titleMedium, color = LgColors.CyanGlow)
@@ -672,6 +837,23 @@ fun HelpWalkthroughContent(
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+            OutlinedButton(
+                onClick = {
+                    runCatching { uriHandler.openUri("https://lgdigital.ca/walkthrough") }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("walkthrough_open_website_link")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    tint = LgColors.GoldBright,
+                    modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                )
+                Text("Open Website Digital Walkthrough", color = LgColors.GoldBright)
             }
         }
 
