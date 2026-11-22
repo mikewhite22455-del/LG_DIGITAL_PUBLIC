@@ -1,0 +1,36 @@
+[1mdiff --git a/arbitrage/lg_arbitrage/static/index.html b/arbitrage/lg_arbitrage/static/index.html[m
+[1mindex cc4322c..b68386e 100644[m
+[1m--- a/arbitrage/lg_arbitrage/static/index.html[m
+[1m+++ b/arbitrage/lg_arbitrage/static/index.html[m
+[36m@@ -2,7 +2,8 @@[m
+ <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#000000"><title>LG Arbitrage</title><link rel="icon" href="/static/brand/lg-gold-coin-512-v1.png" type="image/png"><link rel="stylesheet" href="/static/style.css"></head>[m
+ <body data-lg-arbitrage-standalone>[m
+ <div id="login" class="login-shell hidden"><form id="login-form" class="login-card"><div class="login-brand"><img class="brand-coin" src="/static/brand/lg-gold-coin-512-v1.png" width="80" height="80" alt="LG DIGITAL logo"><img class="brand-wordmark" src="/static/brand/lg-gold-turquoise-wordmark-v1.png" width="240" height="29" alt="LG DIGITAL"></div><p class="eyebrow">PRIVATE WORKSTATION</p><h1>LG ARBITRAGE</h1><p>Sign in with the access token shown in your launcher or saved in <code>data/access-token.txt</code>.</p><label for="token">Dashboard access token</label><input id="token" type="password" autocomplete="current-password" required><button class="primary" type="submit">Open workstation <span>→</span></button><p id="login-error" role="alert"></p><small>Your exchange keys stay on the server.</small></form></div>[m
+[31m-<aside class="sidebar"><a class="brand" href="/"><img class="brand-coin" src="/static/brand/lg-gold-coin-512-v1.png" alt="LG DIGITAL logo" width="48" height="48"><span><img class="brand-wordmark" src="/static/brand/lg-gold-turquoise-wordmark-v1.png" alt="LG DIGITAL" width="135" height="16"><b class="brand-product">ARBITRAGE</b><small>USD · SPOT MARKETS</small></span></a><p class="nav-caption">WORKSTATION</p><nav aria-label="Main navigation"><button data-tab="overview" class="nav active"><span>◈</span> Overview</button><button data-tab="routes" class="nav"><span>⇄</span> Opportunities</button><button data-tab="inventory" class="nav"><span>▤</span> Inventory</button><button data-tab="activity" class="nav"><span>◷</span> Activity</button><button data-tab="settings" class="nav"><span>⚙</span> Settings</button><button data-tab="guide" class="nav"><span>?</span> Getting started</button></nav><div class="side-bottom"><div class="mini-line"></div><strong>LG DIGITAL</strong><p>Your arbitrage workspace</p><a class="digital-link" href="https://lg-digital-owner.onrender.com/#arbitrage" target="_blank" rel="noopener noreferrer">Open LG DIGITAL ↗</a><span class="tag">PRIVATE • V1.0</span><button id="logout" class="text-button">Sign out</button></div></aside>[m
+[32m+[m[32m<aside class="sidebar"><a class="brand" href="/"><img class="brand-coin" src="/static/brand/lg-gold-coin-512-v1.png" alt="LG DIGITAL logo" width="48" height="48"><span><img class="brand-wordmark" src="/static/brand/lg-gold-turquoise-wordmark-v1.png" alt="LG DIGITAL" width="135" height="16"><b class="brand-product">ARBITRAGE</b><small>USD · SPOT MARKETS</small></span></a><p class="nav-caption">WORKSTATION</p><nav aria-label="Main navigation"><button data-tab="overview" class="nav active"><span>◈</span> Overview</button><button data-tab="routes" class="nav"><span>⇄</span> Opportunities</button><button data-tab="inventory" class="nav"><span>▤</span> Inventory</button><button data-tab="activity" class="nav"><span>◷</span> Activity</button><button data-tab="settings" class="nav"><span>⚙</span> Settings</button><button data-tab="guide" class="nav"><span>?</span> Getting started</button>  <a href="/live-sports" class="nav-link{% if active_tab == 'sports' %} active{% endif %}">Live Sports</a>[m
+[32m+[m[32m</nav><div class="side-bottom"><div class="mini-line"></div><strong>LG DIGITAL</strong><p>Your arbitrage workspace</p><a class="digital-link" href="https://lg-digital-owner.onrender.com/#arbitrage" target="_blank" rel="noopener noreferrer">Open LG DIGITAL ↗</a><span class="tag">PRIVATE • V1.0</span><button id="logout" class="text-button">Sign out</button></div></aside>[m
+ <main><header class="topbar"><div><span class="eyebrow">PRIVATE OWNER WORKSPACE</span><div class="top-title">Arbitrage control centre</div></div><div class="top-actions"><span id="source-badge" class="tag gold">DEMO DATA</span><span id="status-badge" class="tag">PAUSED</span><button id="stop" class="stop">Pause all</button></div></header>[m
+ <div id="offline" class="notice danger hidden" role="alert">Connection lost. Values below may be stale. Reconnecting…</div>[m
+ <div id="incident" class="notice danger hidden" role="alert"></div>[m
+[1mdiff --git a/northstar/dist/index.html b/northstar/dist/index.html[m
+[1mindex 72ea6f8..982d80e 100644[m
+[1m--- a/northstar/dist/index.html[m
+[1m+++ b/northstar/dist/index.html[m
+[36m@@ -1114,7 +1114,8 @@[m [mhtml body.lg-option-two .app .workspace-page[data-page="account"] .risk-body{pad[m
+       <button data-view="account"><span class="nav-icon">◉</span><span>Account</span></button>[m
+       [m
+       <button data-view="help"><span class="nav-icon">?</span><span>Help &amp; Contact</span></button>[m
+[31m-    </nav></div>[m
+[32m+[m[32m      <a href="/live-sports" class="nav-link{% if active_tab == 'sports' %} active{% endif %}">Live Sports</a>[m
+[32m+[m[32m</nav></div>[m
+     <div class="side-bottom"><div class="connect-card"><div class="connect-title">Exchange connections</div><div class="connect-desc" id="exchangeConnectionSummary">Checking private exchange connection. Market prices use public feeds.</div><button class="small-btn" id="openConnections">Exchange details ↗</button></div></div>[m
+   </aside>[m
+   <main class="main">[m
+[36m@@ -1921,6 +1922,7 @@[m [m$('#refreshMarkets').onclick=refreshMarketOverview;$('#refreshNews').onclick=ref[m
+ <a href="https://lg-digital-private.onrender.com/privacy.html">Privacy information</a>[m
+ <a href="https://lg-digital-private.onrender.com/terms.html">Terms &amp; billing</a>[m
+ <a href="https://lg-digital-crypto.mikewhite22455.chatgpt.site/#membership">Membership</a>[m
+[32m+[m[32m  <a href="/live-sports" class="nav-link{% if active_tab == 'sports' %} active{% endif %}">Live Sports</a>[m
+ </nav>[m
+ <p>Crypto markets involve risk. Research, charts and strategy tools do not guarantee outcomes.</p>[m
+ <small>© 2026 LG DIGITAL · YOUR MARKETS. YOUR STRATEGY. YOUR CONTROL.</small>[m

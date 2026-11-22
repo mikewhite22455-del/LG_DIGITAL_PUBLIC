@@ -1,0 +1,267 @@
+package com.example.domain.models
+
+import java.math.BigDecimal
+
+sealed interface UiState<out T> {
+    data object Loading : UiState<Nothing>
+    data class Success<T>(val data: T) : UiState<T>
+    data class Error(val message: String) : UiState<Nothing>
+}
+
+data class MarketTicker(
+    val symbol: String,
+    val name: String,
+    val priceUsd: Double,
+    val change24hPct: Double,
+    val volume24hUsd: Double,
+    val marketCapUsd: Double,
+    val high24h: Double,
+    val low24h: Double,
+    val source: String
+)
+
+data class MarketBreadth(
+    val totalAssets: Int,
+    val advancing: Int,
+    val declining: Int,
+    val avgChangePct: Double,
+    val totalVolume24hUsd: Double,
+    val topGainer: MarketTicker?,
+    val topLoser: MarketTicker?
+)
+
+data class Candle(
+    val timestampSec: Long,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+    val volume: Double
+)
+
+enum class ChartTimeframe(val label: String, val krakenInterval: Int, val barsPerDay: Int) {
+    M15("15m", 15, 96),
+    H1("1h", 60, 24),
+    H4("4h", 240, 6),
+    D1("1d", 1440, 1)
+}
+
+enum class ChartOverlay(val label: String) {
+    NONE("Price Only"),
+    SMA_CROSS("SMA 9 / 21"),
+    EMA_CROSS("EMA 12 / 26"),
+    BOLLINGER("Bollinger 20 ± 2σ"),
+    SUPERTREND("Supertrend (10, 3x)")
+}
+
+enum class StrategyType(
+    val id: String,
+    val title: String,
+    val summary: String
+) {
+    TREND_CROSS("trend_cross", "Trend Cross (SMA 9/21)", "Fast SMA 9 crossing slow SMA 21 with trend bias"),
+    RSI_REVERSAL("rsi_reversal", "RSI Reversal (14)", "Mean reversion around 30 oversold / 70 overbought"),
+    RANGE_BREAKOUT("range_breakout", "Range Breakout (20)", "20-candle structural high/low breakout"),
+    EMA_CROSS("ema_cross", "EMA Cross (12/26)", "Exponential fast/slow crossover with momentum"),
+    MACD_CROSS("macd_cross", "MACD Cross (12/26/9)", "MACD line crossing 9-period signal line"),
+    BOLLINGER_REVERSION("bollinger_reversion", "Bollinger Reversion", "Mean reversion against 20-period ± 2σ bands"),
+    VOLUME_BREAKOUT("volume_breakout", "Volume Breakout", "20-bar range break confirmed by 1.5x average volume"),
+    VWAP_TREND("vwap_trend", "VWAP Trend (20)", "Rolling 20-bar volume-weighted average price reclaim"),
+    ATR_BREAKOUT("atr_breakout", "ATR Breakout (14)", "Volatility-adjusted 0.8× ATR(14) expansion trigger"),
+    SUPERTREND("supertrend", "Supertrend (10, 3.0x)", "ATR(10) × 3.0 adaptive trend flip trailing band"),
+    MULTI_PAIR_GRID("multi_pair_grid", "Multi-Pair Grid", "5-level dynamic grid over 30-candle price channel")
+}
+
+enum class SignalAction { BUY, SELL, HOLD }
+
+data class StrategySignal(
+    val strategy: StrategyType,
+    val action: SignalAction,
+    val confidence: Double,
+    val reason: String,
+    val entryPrice: Double,
+    val indicatorValues: Map<String, Double> = emptyMap()
+)
+
+data class BacktestTrade(
+    val timestampSec: Long,
+    val side: SignalAction,
+    val price: Double,
+    val returnPct: Double,
+    val phase: String
+)
+
+data class BacktestResult(
+    val symbol: String,
+    val strategy: StrategyType,
+    val timeframe: ChartTimeframe,
+    val totalReturnPct: Double,
+    val trainReturnPct: Double,
+    val validationReturnPct: Double,
+    val winRatePct: Double,
+    val maxDrawdownPct: Double,
+    val totalTrades: Int,
+    val feeBps: Double,
+    val slippageBps: Double,
+    val equityCurve: List<Double>,
+    val recentTrades: List<BacktestTrade>
+)
+
+data class ResearchProjection(
+    val symbol: String,
+    val currentPrice: Double,
+    val projected24hPrice: Double,
+    val projectedChangePct: Double,
+    val support20: Double,
+    val resistance20: Double,
+    val rsi14: Double,
+    val atr14: Double,
+    val regimeLabel: String
+)
+
+enum class RiskProfile(
+    val label: String,
+    val maxOrderUsd: Double,
+    val maxDailyNotionalUsd: Double,
+    val defaultStopLossPct: Double,
+    val description: String
+) {
+    LOW("LOW", 125.0, 450.0, 2.5, "Conservative sizing, strict drawdown lock"),
+    MEDIUM("MEDIUM", 350.0, 1200.0, 4.0, "Balanced adaptive momentum allocation"),
+    HIGH("HIGH", 750.0, 3000.0, 6.5, "Aggressive trend & breakout capture")
+}
+
+data class NewsItem(
+    val title: String,
+    val link: String,
+    val publishedAt: String,
+    val source: String,
+    val summary: String
+)
+
+data class OrderBookLevel(
+    val price: BigDecimal,
+    val quantity: BigDecimal
+)
+
+data class OrderBookSnapshot(
+    val venue: String,
+    val pair: String,
+    val timestampMs: Long,
+    val bids: List<OrderBookLevel>,
+    val asks: List<OrderBookLevel>,
+    val isSynthetic: Boolean
+)
+
+enum class ArbitrageMode(val label: String) {
+    DEMO("Demo (Synthetic)"),
+    PUBLIC("Public Live Books")
+}
+
+data class ArbitrageOpportunity(
+    val id: String,
+    val symbol: String,
+    val buyVenue: String,
+    val sellVenue: String,
+    val buyVwap: BigDecimal,
+    val sellVwap: BigDecimal,
+    val baseQuantity: BigDecimal,
+    val notionalUsd: BigDecimal,
+    val grossSpreadBps: Double,
+    val takerFeesUsd: BigDecimal,
+    val slippageBufferUsd: BigDecimal,
+    val rebalanceReserveUsd: BigDecimal,
+    val worstCaseNetUsd: BigDecimal,
+    val worstCaseNetBps: Double,
+    val qualified: Boolean,
+    val rejectionReasons: List<String>,
+    val isSynthetic: Boolean,
+    val scannedAtMs: Long
+)
+
+data class BreakoutCandidate(
+    val symbol: String,
+    val priceUsd: Double,
+    val breakoutLevel: Double,
+    val volumeRatio: Double,
+    val change24hPct: Double,
+    val strengthScore: Double
+)
+
+data class DexPairInfo(
+    val chainId: String,
+    val dexId: String,
+    val baseSymbol: String,
+    val quoteSymbol: String,
+    val priceUsd: Double,
+    val priceChange24h: Double,
+    val volume24hUsd: Double,
+    val liquidityUsd: Double,
+    val pairUrl: String
+)
+
+data class MiningQuote(
+    val symbol: String,
+    val name: String,
+    val algorithm: String,
+    val priceUsd: Double,
+    val networkHashrateLabel: String,
+    val difficultyLabel: String,
+    val blockReward: Double,
+    val estDailyUsdPerUnit: Double
+)
+
+data class SportsArbResult(
+    val impliedProbTotalPct: Double,
+    val edgePct: Double,
+    val isArbitrage: Boolean,
+    val stakeA: Double,
+    val stakeB: Double,
+    val guaranteedPayout: Double,
+    val guaranteedProfit: Double
+)
+
+data class KellyResult(
+    val fullKellyPct: Double,
+    val fractionalKellyPct: Double,
+    val recommendedStakeUsd: Double,
+    val expectedValuePct: Double
+)
+
+data class DevigResult(
+    val fairProbA: Double,
+    val fairProbB: Double,
+    val fairOddsA: Double,
+    val fairOddsB: Double,
+    val vigPct: Double
+)
+
+data class PoissonSimResult(
+    val homeWinPct: Double,
+    val drawPct: Double,
+    val awayWinPct: Double,
+    val over25Pct: Double,
+    val mostLikelyScore: String
+)
+
+data class CompoundApyResult(
+    val effectiveApyPct: Double,
+    val finalValueUsd: Double,
+    val totalYieldUsd: Double
+)
+
+data class ImpermanentLossResult(
+    val ilPct: Double,
+    val hodlValueUsd: Double,
+    val lpValueUsd: Double,
+    val netDiffUsd: Double
+)
+
+data class RiskSizeResult(
+    val riskAmountUsd: Double,
+    val stopDistancePct: Double,
+    val positionQuantity: Double,
+    val positionNotionalUsd: Double,
+    val target2RPrice: Double,
+    val target3RPrice: Double
+)
