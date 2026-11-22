@@ -111,6 +111,7 @@ import com.example.ui.components.HourlyTrendSparkline
 import com.example.ui.components.LiveTelemetryCommandCard
 import com.example.ui.components.MetricTile
 import com.example.ui.components.PortfolioSummaryWidget
+import com.example.ui.components.PriceSummaryDashboardCard
 import com.example.ui.components.SocialMediaLinksBar
 import com.example.ui.components.StatusPill
 import com.example.ui.components.circuitTextFieldBackdrop
@@ -157,7 +158,10 @@ fun DashboardScreen(
     onSelectHistoryAsset: (String) -> Unit = {},
     onSelectHistoryWindow: (HistoryWindow) -> Unit = {},
     onRefreshHistory: () -> Unit = {},
-    onOpenBacktest: (String) -> Unit = {}
+    onOpenBacktest: (String) -> Unit = {},
+    onRefreshPriceSummary: () -> Unit = onRefreshAll,
+    onSelectPriceSummaryFilter: (String) -> Unit = {},
+    onOpenExchangeConfig: () -> Unit = {}
 ) {
     val uriHandler = LocalUriHandler.current
     var selectedCoinSheet by remember { mutableStateOf<MarketTicker?>(null) }
@@ -299,6 +303,22 @@ fun DashboardScreen(
                             selectedCoinSheet = ticker
                         } ?: onSelectCoinForTrade(sym)
                     }
+                )
+            }
+
+            // 0. Real-Time Primary Pairs Price Summary List (from Configured Exchanges)
+            item {
+                PriceSummaryDashboardCard(
+                    rows = marketsState.priceSummaryRows,
+                    configuredExchangeIds = marketsState.configuredSummaryExchanges,
+                    selectedExchangeFilter = marketsState.priceSummaryExchangeFilter,
+                    isRefreshing = marketsState.isRefreshingPriceSummary,
+                    lastUpdatedMs = marketsState.priceSummaryUpdatedMs,
+                    errorMessage = marketsState.priceSummaryError,
+                    onSelectExchangeFilter = onSelectPriceSummaryFilter,
+                    onRefresh = onRefreshPriceSummary,
+                    onOpenExchangeConfig = onOpenExchangeConfig,
+                    onSelectPair = { sym -> onSelectCoinForTrade(sym) }
                 )
             }
 

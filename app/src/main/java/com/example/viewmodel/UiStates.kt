@@ -36,6 +36,21 @@ import com.example.domain.models.StrategySignal
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
 
+data class ConfiguredExchangePriceRow(
+    val id: String,
+    val exchangeId: String,
+    val exchangeName: String,
+    val symbol: String,
+    val pairLabel: String,
+    val priceUsd: Double,
+    val change24hPct: Double,
+    val high24h: Double,
+    val low24h: Double,
+    val volume24hUsd: Double,
+    val isApiConfigured: Boolean,
+    val fetchedAtMs: Long
+)
+
 data class MarketsUiState(
     val tickersState: UiState<List<MarketTicker>> = UiState.Loading,
     val isRefreshing: Boolean = false,
@@ -47,7 +62,13 @@ data class MarketsUiState(
     val historyWindow: HistoryWindow = HistoryWindow.H24,
     val historyState: UiState<List<PriceHistoryPoint>> = UiState.Loading,
     val fearGreedState: UiState<FearGreedIndexData> = UiState.Loading,
-    val isRefreshingFearGreed: Boolean = false
+    val isRefreshingFearGreed: Boolean = false,
+    val priceSummaryRows: List<ConfiguredExchangePriceRow> = emptyList(),
+    val configuredSummaryExchanges: List<String> = emptyList(),
+    val isRefreshingPriceSummary: Boolean = false,
+    val priceSummaryUpdatedMs: Long = 0L,
+    val priceSummaryExchangeFilter: String = "ALL",
+    val priceSummaryError: String? = null
 )
 
 data class TradeUiState(
@@ -71,7 +92,21 @@ data class TradeUiState(
     val venuesScannedLabel: String = "Kraken · KuCoin · Bitstamp",
     val adaptiveOpportunities: List<AdaptiveOpportunity> = emptyList(),
     val exchangeScanSummary: String? = null,
-    val lastExchangeScanMs: Long = 0L
+    val lastExchangeScanMs: Long = 0L,
+    val executionMode: com.example.domain.models.ExecutionMode = com.example.domain.models.ExecutionMode.PAPER,
+    val liveExecutionRoute: com.example.domain.models.LiveExecutionRoute = com.example.domain.models.LiveExecutionRoute.LG_PRIVATE_SERVER,
+    val activeLiveServerTarget: com.example.domain.models.LiveServerTarget = com.example.domain.models.LiveServerTarget.LG_PRIVATE,
+    val privateServerHealth: com.example.domain.models.LiveServerHealth = com.example.domain.models.LiveServerHealth(
+        target = com.example.domain.models.LiveServerTarget.LG_PRIVATE,
+        isOnline = false
+    ),
+    val ownerServerHealth: com.example.domain.models.LiveServerHealth = com.example.domain.models.LiveServerHealth(
+        target = com.example.domain.models.LiveServerTarget.LG_OWNER,
+        isOnline = false
+    ),
+    val liveConnectors: List<com.example.domain.models.LiveConnectorStatus> = emptyList(),
+    val isSubmittingLiveOrder: Boolean = false,
+    val recentLiveReceipts: List<com.example.domain.models.LiveOrderReceipt> = emptyList()
 )
 
 data class ArbitrageUiState(
@@ -130,4 +165,48 @@ data class AdvisorUiState(
     val streamingReply: String = "",
     val isGenerating: Boolean = false,
     val errorMessage: String? = null
+)
+
+enum class ExchangeHealthState {
+    NOT_CONFIGURED,
+    CHECKING,
+    CONNECTED,
+    ERROR
+}
+
+data class ExchangeConnectionStatus(
+    val exchangeId: String,
+    val state: ExchangeHealthState = ExchangeHealthState.NOT_CONFIGURED,
+    val latencyMs: Long = 0L,
+    val detail: String = "No API keys stored",
+    val lastCheckedMs: Long = 0L,
+    val endpoint: String = "",
+    val httpStatusCode: Int? = null,
+    val publicApiReachable: Boolean? = null,
+    val publicLatencyMs: Long = 0L,
+    val credentialSource: String = "Not Stored"
+)
+
+data class ExchangePingLogEntry(
+    val id: String,
+    val exchangeId: String,
+    val exchangeName: String,
+    val state: ExchangeHealthState,
+    val latencyMs: Long,
+    val httpStatusCode: Int?,
+    val endpoint: String,
+    val summary: String,
+    val timestampMs: Long
+)
+
+data class ExchangeConfigUiState(
+    val credentials: com.example.data.local.EncryptedExchangeCredentials = com.example.data.local.EncryptedExchangeCredentials(),
+    val testingExchangeId: String? = null,
+    val isVerifyingAll: Boolean = false,
+    val isPingingKrakenCoinbase: Boolean = false,
+    val autoVerifyEnabled: Boolean = true,
+    val connectionTestResults: Map<String, String> = emptyMap(),
+    val connectionStatuses: Map<String, ExchangeConnectionStatus> = emptyMap(),
+    val pingHistory: List<ExchangePingLogEntry> = emptyList(),
+    val statusMessage: String? = null
 )

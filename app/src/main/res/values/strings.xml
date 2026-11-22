@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LG Digital</string>
+    <string name="qr_scanner_title">QR API CREDENTIAL SCANNER</string>
+    <string name="qr_scanner_subtitle">ON-DEVICE CAMERAX · ML KIT BARCODE</string>
+    <string name="qr_scanner_scan_button">SCAN API QR</string>
+    <string name="qr_scanner_permission_title">Camera Access Required</string>
+    <string name="qr_scanner_permission_body">Grant camera permission to scan API key QR codes directly from Kraken Pro, Coinbase Advanced, KuCoin, or Bitstamp portals. Camera frames are processed strictly on-device and never leave your phone.</string>
+    <string name="qr_scanner_grant_permission">GRANT CAMERA ACCESS</string>
+    <string name="qr_scanner_open_settings">OPEN APP SETTINGS</string>
+    <string name="qr_scanner_hint">Align your exchange portal API QR code inside the frame</string>
+    <string name="qr_scanner_save_and_verify">SAVE &amp; VERIFY NOW</string>
+    <string name="qr_scanner_fill_only">FILL FIELDS ONLY</string>
+    <string name="qr_scanner_rescan">RESCAN</string>
+    <string name="qr_scanner_toggle_torch">Toggle flashlight</string>
+    <string name="qr_scanner_switch_camera">Switch camera lens</string>
+    <string name="qr_scanner_close">Close QR scanner</string>
 </resources>

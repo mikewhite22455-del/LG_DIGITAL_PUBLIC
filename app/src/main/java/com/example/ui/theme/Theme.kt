@@ -311,6 +311,23 @@ object LgColors {
 }
 
 /**
+ * Original LG DIGITAL signature futuristic geometric brand typeface (Orbitron).
+ */
+val OrbitronFontFamily = FontFamily(
+    Font(R.font.orbitron, FontWeight.Normal),
+    Font(R.font.orbitron, FontWeight.Medium),
+    Font(R.font.orbitron, FontWeight.SemiBold),
+    Font(R.font.orbitron, FontWeight.Bold),
+    Font(R.font.orbitron, FontWeight.ExtraBold),
+    Font(R.font.orbitron, FontWeight.Black)
+)
+
+/**
+ * Primary brand wordmark font for "LG DIGITAL" headers across all screens.
+ */
+val LgBrandFontFamily = OrbitronFontFamily
+
+/**
  * TradingView-matched bold heavy geometric sans-serif logo typeface (Archivo Black).
  */
 val TradingViewFontFamily = FontFamily(
@@ -321,20 +338,21 @@ val TradingViewFontFamily = FontFamily(
 )
 
 /**
- * Alias retained for compatibility across components; uses the TradingView bold geometric logo font.
+ * Original bold tech display typeface (Russo One) from the classic LG Digital app.
  */
-val RussoOneFontFamily = TradingViewFontFamily
+val RussoOneFontFamily = FontFamily(
+    Font(R.font.russo_one, FontWeight.Normal),
+    Font(R.font.russo_one, FontWeight.Medium),
+    Font(R.font.russo_one, FontWeight.SemiBold),
+    Font(R.font.russo_one, FontWeight.Bold),
+    Font(R.font.russo_one, FontWeight.ExtraBold)
+)
 
 val ChakraPetchFontFamily = FontFamily(
     Font(R.font.chakra_petch, FontWeight.Normal),
     Font(R.font.chakra_petch, FontWeight.SemiBold),
     Font(R.font.chakra_petch, FontWeight.Bold),
     Font(R.font.chakra_petch, FontWeight.ExtraBold)
-)
-
-val OrbitronFontFamily = FontFamily(
-    Font(R.font.orbitron, FontWeight.Normal),
-    Font(R.font.orbitron, FontWeight.Bold)
 )
 
 val DmSansFontFamily = FontFamily(

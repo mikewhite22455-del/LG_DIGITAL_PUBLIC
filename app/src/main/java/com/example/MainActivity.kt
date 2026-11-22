@@ -33,9 +33,12 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CandlestickChart
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
@@ -105,18 +108,23 @@ import com.example.core.BiometricAuthManager
 import com.example.core.BiometricCapability
 import com.example.core.Formatters
 import com.example.core.configureAppCheck
+import com.example.domain.models.ExecutionMode
 import com.example.domain.models.IndicatorBacktestConfig
+import com.example.domain.models.LiveServerTarget
 import com.example.ui.components.FloatingAiChatBoxSheet
 import com.example.ui.components.FloatingAiChatFab
 import com.example.ui.components.LgCircuitBackground
+import com.example.ui.components.PriceSummaryDashboardScreen
 import com.example.ui.components.StatusPill
 import com.example.ui.screens.AdvisorScreen
 import com.example.ui.screens.AllPagesPreviewOverlay
 import com.example.ui.screens.BiometricLockScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.ExchangeConfigurationScreen
 import com.example.ui.screens.HelpWalkthroughSheet
 import com.example.ui.screens.LabsScreen
 import com.example.ui.screens.LabsTool
+import com.example.ui.screens.LiveLgPortalScreen
 import com.example.ui.screens.PreviewDestination
 import com.example.ui.screens.TradeScreen
 import com.example.ui.screens.TradeSubWorkspace
@@ -130,11 +138,13 @@ import com.example.ui.screens.ThemePreviewGalleryScreen
 import com.example.ui.screens.WelcomeSignInScreen
 import com.example.ui.theme.AppThemePrefs
 import com.example.ui.theme.DropdownTabTextStyle
+import com.example.ui.theme.LgBrandFontFamily
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.LgDigitalTheme
 import com.example.ui.theme.LgThemeState
 import com.example.ui.theme.TabLabelTextStyle
 import com.example.viewmodel.MainViewModel
+import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -238,8 +248,13 @@ fun LgDigitalAppShell(
     var welcomeStartOnSignIn by remember { mutableStateOf(false) }
     var showMembershipScreen by remember { mutableStateOf(false) }
     var showThemeGallery by remember { mutableStateOf(false) }
+    var showLiveLgPortal by remember { mutableStateOf(false) }
+    var showPriceSummaryDashboard by remember { mutableStateOf(false) }
+    var showExchangeConfig by remember { mutableStateOf(false) }
 
+    val marketsState by viewModel.marketsState.collectAsStateWithLifecycle()
     val tradeState by viewModel.tradeState.collectAsStateWithLifecycle()
+    val exchangeConfigState by viewModel.exchangeConfigState.collectAsStateWithLifecycle()
 
     if (biometricLockEnabled && !isDashboardUnlocked) {
         BiometricLockScreen(
@@ -291,11 +306,75 @@ fun LgDigitalAppShell(
         return
     }
 
+    if (showPriceSummaryDashboard && !showExchangeConfig) {
+        PriceSummaryDashboardScreen(
+            rows = marketsState.priceSummaryRows,
+            configuredExchangeIds = marketsState.configuredSummaryExchanges,
+            selectedExchangeFilter = marketsState.priceSummaryExchangeFilter,
+            isRefreshing = marketsState.isRefreshingPriceSummary,
+            lastUpdatedMs = marketsState.priceSummaryUpdatedMs,
+            errorMessage = marketsState.priceSummaryError,
+            onSelectExchangeFilter = viewModel::selectPriceSummaryExchangeFilter,
+            onRefresh = { viewModel.refreshPriceSummaryDashboard(silent = false) },
+            onOpenExchangeConfig = { showExchangeConfig = true },
+            onSelectPair = { sym ->
+                viewModel.selectTradeSymbol(sym)
+                showPriceSummaryDashboard = false
+                showLiveLgPortal = false
+            },
+            onClose = { showPriceSummaryDashboard = false }
+        )
+        return
+    }
+
+    if (showLiveLgPortal && !showExchangeConfig) {
+        LiveLgPortalScreen(
+            activeTarget = tradeState.activeLiveServerTarget,
+            privateHealth = tradeState.privateServerHealth,
+            ownerHealth = tradeState.ownerServerHealth,
+            isPrimaryLauncher = false,
+            onSelectTarget = viewModel::selectLiveServerTarget,
+            onPingTarget = viewModel::pingLiveServer,
+            onOpenPriceSummary = {
+                viewModel.refreshPriceSummaryDashboard(silent = false)
+                showPriceSummaryDashboard = true
+            },
+            onOpenExchangeConfig = { showExchangeConfig = true },
+            onClose = { showLiveLgPortal = false }
+        )
+        return
+    }
+
+    if (showExchangeConfig) {
+        ExchangeConfigurationScreen(
+            credentials = exchangeConfigState.credentials,
+            testingExchangeId = exchangeConfigState.testingExchangeId,
+            isVerifyingAll = exchangeConfigState.isVerifyingAll,
+            isPingingKrakenCoinbase = exchangeConfigState.isPingingKrakenCoinbase,
+            autoVerifyEnabled = exchangeConfigState.autoVerifyEnabled,
+            connectionStatuses = exchangeConfigState.connectionStatuses,
+            pingHistory = exchangeConfigState.pingHistory,
+            statusMessage = exchangeConfigState.statusMessage,
+            onSaveKraken = viewModel::saveKrakenCredentials,
+            onSaveCoinbase = viewModel::saveCoinbaseCredentials,
+            onSaveKuCoin = viewModel::saveKuCoinCredentials,
+            onSaveBitstamp = viewModel::saveBitstampCredentials,
+            onSaveLgServerToken = viewModel::saveLgServerToken,
+            onTestConnection = viewModel::testExchangeConnection,
+            onPingKrakenAndCoinbase = viewModel::pingKrakenAndCoinbase,
+            onVerifyAllConnections = viewModel::verifyAllExchangeConnections,
+            onToggleAutoVerify = viewModel::setAutoVerifyExchanges,
+            onClearExchange = viewModel::clearExchangeCredentials,
+            onClearAll = viewModel::clearAllExchangeCredentials,
+            onClose = { showExchangeConfig = false }
+        )
+        return
+    }
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDest = backStackEntry?.destination
 
-    val marketsState by viewModel.marketsState.collectAsStateWithLifecycle()
     val arbitrageState by viewModel.arbitrageState.collectAsStateWithLifecycle()
     val labsState by viewModel.labsState.collectAsStateWithLifecycle()
     val vaultState by viewModel.vaultState.collectAsStateWithLifecycle()
@@ -480,9 +559,11 @@ fun LgDigitalAppShell(
                         Column {
                             Text(
                                 text = "LG DIGITAL",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = LgColors.Gold,
+                                fontFamily = LgBrandFontFamily,
                                 fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                letterSpacing = 1.9.sp,
+                                color = LgColors.GoldBright,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -517,13 +598,20 @@ fun LgDigitalAppShell(
                                 .clickable { showMembershipScreen = true }
                                 .testTag("top_membership_pill")
                         )
+                        val isLiveMode = tradeState.executionMode == ExecutionMode.LIVE
                         StatusPill(
-                            text = if (vaultState.account.autopilotRunning) "BOT ON" else "PAPER",
-                            color = if (vaultState.account.autopilotRunning) LgColors.Turquoise else LgColors.Gold,
-                            modifier = Modifier.clickable {
-                                selectedTradeWorkspace = TradeSubWorkspace.ORDER
-                                navigateToTab(TradeRoute)
-                            }
+                            text = when {
+                                isLiveMode -> "LIVE"
+                                vaultState.account.autopilotRunning -> "BOT ON"
+                                else -> "PAPER"
+                            },
+                            color = if (isLiveMode || vaultState.account.autopilotRunning) LgColors.Turquoise else LgColors.Gold,
+                            modifier = Modifier
+                                .clickable {
+                                    selectedTradeWorkspace = TradeSubWorkspace.ORDER
+                                    navigateToTab(TradeRoute)
+                                }
+                                .testTag("top_execution_mode_pill")
                         )
                         if (biometricLockEnabled) {
                             IconButton(
@@ -613,6 +701,37 @@ fun LgDigitalAppShell(
                                 }
 
                                 TabDropdownItem(
+                                    label = "LIVE DESK · PRIVATE (KRAKEN+CB)",
+                                    icon = Icons.Filled.Bolt,
+                                    selected = false,
+                                    tag = "dropdown_tab_live_private"
+                                ) {
+                                    viewModel.selectLiveServerTarget(LiveServerTarget.LG_PRIVATE)
+                                    showLiveLgPortal = true
+                                }
+
+                                TabDropdownItem(
+                                    label = "LIVE DESK · OWNER PORTAL",
+                                    icon = Icons.Filled.CloudDone,
+                                    selected = false,
+                                    tag = "dropdown_tab_live_owner"
+                                ) {
+                                    viewModel.selectLiveServerTarget(LiveServerTarget.LG_OWNER)
+                                    showLiveLgPortal = true
+                                }
+
+                                TabDropdownItem(
+                                    label = "EXCHANGE CONFIGURATION",
+                                    icon = Icons.Filled.Key,
+                                    selected = false,
+                                    tag = "dropdown_tab_exchange_config"
+                                ) {
+                                    showExchangeConfig = true
+                                }
+
+                                HorizontalDivider(color = LgColors.Gold.copy(alpha = 0.35f))
+
+                                TabDropdownItem(
                                     label = "HOME",
                                     icon = Icons.Filled.Home,
                                     selected = currentDest?.hasRoute(MarketsRoute::class) == true,
@@ -620,7 +739,7 @@ fun LgDigitalAppShell(
                                 ) { navigateToTab(MarketsRoute) }
 
                                 TabDropdownItem(
-                                    label = "TRADE · PAPER DESK",
+                                    label = if (tradeState.executionMode == ExecutionMode.LIVE) "TRADE · LIVE DESK" else "TRADE · ORDER DESK",
                                     icon = Icons.Filled.CandlestickChart,
                                     selected = currentDest?.hasRoute(TradeRoute::class) == true && selectedTradeWorkspace == TradeSubWorkspace.ORDER,
                                     tag = "dropdown_tab_trade"
@@ -927,7 +1046,10 @@ fun LgDigitalAppShell(
                                 viewModel.selectTradeSymbol(sym)
                                 selectedTradeWorkspace = TradeSubWorkspace.BACKTEST
                                 navigateToTab(TradeRoute)
-                            }
+                            },
+                            onRefreshPriceSummary = { viewModel.refreshPriceSummaryDashboard(silent = false) },
+                            onSelectPriceSummaryFilter = viewModel::selectPriceSummaryExchangeFilter,
+                            onOpenExchangeConfig = { showExchangeConfig = true }
                         )
                     }
                     composable<TradeRoute> {
@@ -949,7 +1071,15 @@ fun LgDigitalAppShell(
                             onSelectBaseCurrency = viewModel::selectBaseCurrency,
                             onSelectConnectedExchange = viewModel::selectConnectedExchange,
                             onScanExchangeMarket = { viewModel.scanEntireExchangeForProfit(autoApplyBest = false) },
-                            onApplyAdaptiveOpportunity = viewModel::applyAdaptiveOpportunity
+                            onApplyAdaptiveOpportunity = viewModel::applyAdaptiveOpportunity,
+                            onSetExecutionMode = viewModel::setExecutionMode,
+                            onSelectLiveRoute = viewModel::selectLiveExecutionRoute,
+                            onPingLiveServers = viewModel::pingLiveServers,
+                            onOpenLiveLgPortal = { target ->
+                                viewModel.selectLiveServerTarget(target)
+                                showLiveLgPortal = true
+                            },
+                            onOpenExchangeConfig = { showExchangeConfig = true }
                         )
                     }
                     composable<AdvisorRoute> {
@@ -1040,7 +1170,8 @@ fun LgDigitalAppShell(
                             membershipProfile = membershipProfile,
                             onOpenMembershipBilling = { showMembershipScreen = true },
                             activeThemeName = LgThemeState.activeTheme.displayName,
-                            onOpenThemePreviews = { showThemeGallery = true }
+                            onOpenThemePreviews = { showThemeGallery = true },
+                            onOpenExchangeConfig = { showExchangeConfig = true }
                         )
                     }
                 }

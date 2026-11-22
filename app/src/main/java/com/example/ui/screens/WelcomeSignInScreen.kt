@@ -84,6 +84,7 @@ import com.example.ui.components.SocialMediaLinksBar
 import com.example.ui.components.SocialPlatform
 import com.example.ui.components.StatusPill
 import com.example.ui.components.circuitTextFieldBackdrop
+import com.example.ui.theme.LgBrandFontFamily
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TabLabelTextStyle
 import com.example.ui.theme.TradingViewFontFamily
@@ -331,9 +332,10 @@ private fun ClassicWelcomeContent(
             )
             Text(
                 text = "LG DIGITAL",
-                fontFamily = TradingViewFontFamily,
+                fontFamily = LgBrandFontFamily,
+                fontWeight = FontWeight.ExtraBold,
                 fontSize = 34.sp,
-                letterSpacing = 1.6.sp,
+                letterSpacing = 2.6.sp,
                 color = LgColors.GoldBright,
                 textAlign = TextAlign.Center
             )
@@ -678,8 +680,10 @@ private fun MemberSignInContent(
                 )
                 Text(
                     text = "LG DIGITAL",
-                    fontFamily = TradingViewFontFamily,
+                    fontFamily = LgBrandFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
+                    letterSpacing = 2.2.sp,
                     color = LgColors.GoldBright
                 )
             }

@@ -6,11 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.core.CoinAssets
 import com.example.core.Formatters
 import com.example.data.local.AppDatabase
+import com.example.data.local.EncryptedExchangeCredentialStore
 import com.example.data.local.PayoutRuleEntity
 import com.example.data.local.PriceTriggerEntity
 import com.example.data.local.TradingRepository
 import com.example.data.remote.AdvisorMessage
 import com.example.data.remote.AiAdvisorRepository
+import com.example.data.remote.ExchangePingService
+import com.example.data.remote.LiveTradingClient
 import com.example.data.remote.MarketApiClient
 import com.example.domain.engine.ArbitrageEngine
 import com.example.domain.engine.TechnicalEngine
@@ -22,9 +25,12 @@ import com.example.domain.models.Candle
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
 import com.example.domain.models.ConnectedExchange
+import com.example.domain.models.ExecutionMode
 import com.example.domain.models.FearGreedIndexData
 import com.example.domain.models.HistoryWindow
 import com.example.domain.models.IndicatorBacktestConfig
+import com.example.domain.models.LiveExecutionRoute
+import com.example.domain.models.LiveServerTarget
 import com.example.domain.models.MarketBreadth
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.RiskProfile
@@ -48,13 +54,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application)
     private val repository = TradingRepository(db.appDao())
+    private val credentialStore = EncryptedExchangeCredentialStore(application)
     private val apiClient = MarketApiClient()
+    private val liveTradingClient = LiveTradingClient()
+    private val exchangePingService = ExchangePingService(credentialStore, liveTradingClient)
     private val aiRepository = AiAdvisorRepository()
 
     private val _marketsState = MutableStateFlow(MarketsUiState())
     val marketsState: StateFlow<MarketsUiState> = _marketsState.asStateFlow()
 
-    private val _tradeState = MutableStateFlow(TradeUiState())
+    private val _tradeState = MutableStateFlow(
+        TradeUiState(liveConnectors = liveTradingClient.getConnectorStatuses())
+    )
     val tradeState: StateFlow<TradeUiState> = _tradeState.asStateFlow()
 
     private val _arbitrageState = MutableStateFlow(ArbitrageUiState())
@@ -69,25 +80,245 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _advisorState = MutableStateFlow(AdvisorUiState())
     val advisorState: StateFlow<AdvisorUiState> = _advisorState.asStateFlow()
 
+    private val _exchangeConfigState = MutableStateFlow(ExchangeConfigUiState())
+    val exchangeConfigState: StateFlow<ExchangeConfigUiState> = _exchangeConfigState.asStateFlow()
+
     private var cachedCandles: List<Candle> = emptyList()
 
     init {
         viewModelScope.launch {
             repository.ensureSeeded()
         }
+        observeEncryptedCredentials()
         observeVaultStreams()
         refreshMarkets()
+        refreshPriceSummaryDashboard()
         refreshFearAndGreed()
         refreshFxRate()
         refreshNews()
         loadAssetHistory("BTC", HistoryWindow.H24)
         loadTradeContext("BTC", ChartTimeframe.H1, StrategyType.TREND_CROSS)
         scanEntireExchangeForProfit(autoApplyBest = false)
+        pingLiveServers()
         scanArbitrage()
         scanBreakouts()
         searchDexPairs("SOL")
         loadMiningQuotes()
         startAutoLiveTelemetryLoop()
+    }
+
+    private fun observeEncryptedCredentials() {
+        viewModelScope.launch {
+            credentialStore.credentialsFlow.collect { creds ->
+                _exchangeConfigState.update { it.copy(credentials = creds) }
+                _tradeState.update { it.copy(liveConnectors = liveTradingClient.getConnectorStatuses(creds)) }
+                refreshPriceSummaryDashboard(silent = true)
+            }
+        }
+    }
+
+    fun saveKrakenCredentials(apiKey: String, apiSecret: String) {
+        viewModelScope.launch {
+            credentialStore.saveKrakenCredentials(apiKey, apiSecret)
+            repository.logMemory("VAULT_API_SAVED", "KRAKEN", "Kraken Pro API credentials encrypted (AES-256-GCM) in local DataStore.")
+            _exchangeConfigState.update {
+                it.copy(statusMessage = "Kraken Pro credentials encrypted. Verifying live API connectivity...")
+            }
+            testExchangeConnection("kraken")
+        }
+    }
+
+    fun saveCoinbaseCredentials(apiKey: String, apiSecret: String) {
+        viewModelScope.launch {
+            credentialStore.saveCoinbaseCredentials(apiKey, apiSecret)
+            repository.logMemory("VAULT_API_SAVED", "COINBASE", "Coinbase Advanced API credentials encrypted (AES-256-GCM) in local DataStore.")
+            _exchangeConfigState.update {
+                it.copy(statusMessage = "Coinbase credentials encrypted. Verifying live API connectivity...")
+            }
+            testExchangeConnection("coinbase")
+        }
+    }
+
+    fun saveKuCoinCredentials(apiKey: String, apiSecret: String, passphrase: String) {
+        viewModelScope.launch {
+            credentialStore.saveKuCoinCredentials(apiKey, apiSecret, passphrase)
+            repository.logMemory("VAULT_API_SAVED", "KUCOIN", "KuCoin Spot API credentials encrypted (AES-256-GCM) in local DataStore.")
+            _exchangeConfigState.update {
+                it.copy(statusMessage = "KuCoin credentials encrypted. Verifying live API connectivity...")
+            }
+            testExchangeConnection("kucoin")
+        }
+    }
+
+    fun saveBitstampCredentials(apiKey: String, apiSecret: String) {
+        viewModelScope.launch {
+            credentialStore.saveBitstampCredentials(apiKey, apiSecret)
+            repository.logMemory("VAULT_API_SAVED", "BITSTAMP", "Bitstamp API credentials encrypted (AES-256-GCM) in local DataStore.")
+            _exchangeConfigState.update {
+                it.copy(statusMessage = "Bitstamp credentials encrypted. Verifying live API connectivity...")
+            }
+            testExchangeConnection("bitstamp")
+        }
+    }
+
+    fun saveLgServerToken(token: String) {
+        viewModelScope.launch {
+            credentialStore.saveLgServerToken(token)
+            repository.logMemory("VAULT_API_SAVED", "LG_SERVER", "LG Render bearer token encrypted (AES-256-GCM) in local DataStore.")
+            _exchangeConfigState.update {
+                it.copy(statusMessage = "LG Render server token encrypted and saved locally.")
+            }
+            pingLiveServers()
+        }
+    }
+
+    fun setAutoVerifyExchanges(enabled: Boolean) {
+        _exchangeConfigState.update { it.copy(autoVerifyEnabled = enabled) }
+    }
+
+    fun testExchangeConnection(exchangeId: String) {
+        viewModelScope.launch {
+            val id = exchangeId.lowercase()
+            _exchangeConfigState.update { st ->
+                st.copy(
+                    testingExchangeId = id,
+                    connectionStatuses = st.connectionStatuses + (
+                        id to ExchangeConnectionStatus(
+                            exchangeId = id,
+                            state = ExchangeHealthState.CHECKING,
+                            detail = "Pinging public gateway & signed HTTPS endpoint...",
+                            lastCheckedMs = System.currentTimeMillis()
+                        )
+                    )
+                )
+            }
+            val report = exchangePingService.pingExchange(id)
+            val status = report.status
+            _exchangeConfigState.update { st ->
+                val updatedHistory = (listOf(report.logEntry) + st.pingHistory).take(12)
+                st.copy(
+                    testingExchangeId = if (st.testingExchangeId == id) null else st.testingExchangeId,
+                    connectionStatuses = st.connectionStatuses + (id to status),
+                    connectionTestResults = st.connectionTestResults + (id to status.detail),
+                    pingHistory = updatedHistory,
+                    statusMessage = status.detail
+                )
+            }
+        }
+    }
+
+    /**
+     * Runs the dedicated ExchangePingService concurrently against Kraken Pro and Coinbase Advanced
+     * using locally stored AES-256-GCM encrypted credentials.
+     */
+    fun pingKrakenAndCoinbase() {
+        viewModelScope.launch {
+            val targets = listOf("kraken", "coinbase")
+            _exchangeConfigState.update { st ->
+                val checkingMap = st.connectionStatuses.toMutableMap()
+                targets.forEach { id ->
+                    checkingMap[id] = ExchangeConnectionStatus(
+                        exchangeId = id,
+                        state = ExchangeHealthState.CHECKING,
+                        detail = "Pinging ${id.replaceFirstChar { it.uppercase() }} gateway & encrypted credentials...",
+                        lastCheckedMs = System.currentTimeMillis()
+                    )
+                }
+                st.copy(
+                    isPingingKrakenCoinbase = true,
+                    connectionStatuses = checkingMap
+                )
+            }
+
+            val batch = exchangePingService.pingKrakenAndCoinbase()
+            _exchangeConfigState.update { st ->
+                val updatedHistory = (batch.logEntries + st.pingHistory).take(12)
+                st.copy(
+                    isPingingKrakenCoinbase = false,
+                    connectionStatuses = st.connectionStatuses + batch.statuses,
+                    connectionTestResults = st.connectionTestResults + batch.statuses
+                        .filterValues { it.state != ExchangeHealthState.NOT_CONFIGURED }
+                        .mapValues { it.value.detail },
+                    pingHistory = updatedHistory,
+                    statusMessage = batch.summaryMessage
+                )
+            }
+        }
+    }
+
+    fun verifyAllExchangeConnections() {
+        viewModelScope.launch {
+            val exchangeIds = listOf("kraken", "coinbase", "kucoin", "bitstamp")
+            _exchangeConfigState.update { st ->
+                val checkingMap = st.connectionStatuses.toMutableMap()
+                exchangeIds.forEach { id ->
+                    checkingMap[id] = ExchangeConnectionStatus(
+                        exchangeId = id,
+                        state = ExchangeHealthState.CHECKING,
+                        detail = "Pinging public gateway & signed API...",
+                        lastCheckedMs = System.currentTimeMillis()
+                    )
+                }
+                st.copy(
+                    isVerifyingAll = true,
+                    connectionStatuses = checkingMap
+                )
+            }
+
+            val batch = exchangePingService.pingAllExchanges()
+            _exchangeConfigState.update { st ->
+                val updatedHistory = (batch.logEntries + st.pingHistory).take(12)
+                st.copy(
+                    isVerifyingAll = false,
+                    connectionStatuses = st.connectionStatuses + batch.statuses,
+                    connectionTestResults = st.connectionTestResults + batch.statuses
+                        .filterValues { it.state != ExchangeHealthState.NOT_CONFIGURED }
+                        .mapValues { it.value.detail },
+                    pingHistory = updatedHistory,
+                    statusMessage = batch.summaryMessage
+                )
+            }
+        }
+    }
+
+    fun clearExchangeCredentials(exchangeId: String) {
+        viewModelScope.launch {
+            val id = exchangeId.lowercase()
+            credentialStore.clearExchange(id)
+            _exchangeConfigState.update { st ->
+                st.copy(
+                    connectionTestResults = st.connectionTestResults - id,
+                    connectionStatuses = st.connectionStatuses + (
+                        id to ExchangeConnectionStatus(
+                            exchangeId = id,
+                            state = ExchangeHealthState.NOT_CONFIGURED,
+                            detail = "Awaiting encrypted API keys",
+                            lastCheckedMs = System.currentTimeMillis()
+                        )
+                    ),
+                    statusMessage = "Cleared ${id.uppercase()} encrypted credentials."
+                )
+            }
+        }
+    }
+
+    fun clearAllExchangeCredentials() {
+        viewModelScope.launch {
+            credentialStore.clearAll()
+            repository.logMemory("VAULT_API_WIPED", "SECURITY", "All locally encrypted exchange API keys wiped by operator.")
+            _exchangeConfigState.update {
+                it.copy(
+                    connectionTestResults = emptyMap(),
+                    connectionStatuses = mapOf(
+                        "kraken" to ExchangeConnectionStatus("kraken", ExchangeHealthState.NOT_CONFIGURED, detail = "Awaiting encrypted API keys"),
+                        "coinbase" to ExchangeConnectionStatus("coinbase", ExchangeHealthState.NOT_CONFIGURED, detail = "Awaiting encrypted API keys"),
+                        "kucoin" to ExchangeConnectionStatus("kucoin", ExchangeHealthState.NOT_CONFIGURED, detail = "Awaiting encrypted API keys"),
+                        "bitstamp" to ExchangeConnectionStatus("bitstamp", ExchangeHealthState.NOT_CONFIGURED, detail = "Awaiting encrypted API keys")
+                    ),
+                    statusMessage = "All local encrypted exchange keys wiped."
+                )
+            }
+        }
     }
 
     /**
@@ -102,6 +333,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 delay(15_000L)
                 tick++
                 refreshMarkets()
+                refreshPriceSummaryDashboard(silent = true)
                 silentRefreshTradeCandles()
                 silentRefreshAssetHistory()
                 if (tick % 2 == 0) {
@@ -115,6 +347,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun selectPriceSummaryExchangeFilter(exchangeId: String) {
+        _marketsState.update { it.copy(priceSummaryExchangeFilter = exchangeId.uppercase()) }
+    }
+
+    fun refreshPriceSummaryDashboard(silent: Boolean = false) {
+        viewModelScope.launch {
+            if (!silent) {
+                _marketsState.update { it.copy(isRefreshingPriceSummary = true, priceSummaryError = null) }
+            }
+            val creds = credentialStore.getCredentials()
+            val configured = buildList {
+                if (creds.hasKraken || isRealSecretValue(com.example.BuildConfig.KRAKEN_API_KEY, com.example.BuildConfig.KRAKEN_API_SECRET)) add("kraken")
+                if (creds.hasCoinbase || isRealSecretValue(com.example.BuildConfig.COINBASE_API_KEY, com.example.BuildConfig.COINBASE_API_SECRET)) add("coinbase")
+                if (creds.hasKuCoin || isRealSecretValue(com.example.BuildConfig.KUCOIN_API_KEY, com.example.BuildConfig.KUCOIN_API_SECRET, com.example.BuildConfig.KUCOIN_API_PASSPHRASE)) add("kucoin")
+                if (creds.hasBitstamp || isRealSecretValue(com.example.BuildConfig.BITSTAMP_API_KEY, com.example.BuildConfig.BITSTAMP_API_SECRET)) add("bitstamp")
+            }
+            val targetExchanges = if (configured.isNotEmpty()) configured else listOf("kraken", "coinbase", "kucoin")
+            apiClient.fetchPrimaryPairsForExchanges(
+                exchangeIds = targetExchanges,
+                configuredExchangeIds = configured.toSet()
+            ).onSuccess { rows ->
+                _marketsState.update { st ->
+                    val currentFilter = st.priceSummaryExchangeFilter
+                    val validFilter = if (currentFilter == "ALL" || rows.any { it.exchangeId.equals(currentFilter, ignoreCase = true) }) {
+                        currentFilter
+                    } else {
+                        "ALL"
+                    }
+                    st.copy(
+                        priceSummaryRows = rows,
+                        configuredSummaryExchanges = configured,
+                        isRefreshingPriceSummary = false,
+                        priceSummaryUpdatedMs = System.currentTimeMillis(),
+                        priceSummaryExchangeFilter = validFilter,
+                        priceSummaryError = null
+                    )
+                }
+            }.onFailure { err ->
+                _marketsState.update { st ->
+                    st.copy(
+                        configuredSummaryExchanges = configured,
+                        isRefreshingPriceSummary = false,
+                        priceSummaryError = err.message ?: "Unable to fetch live exchange prices"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun isRealSecretValue(vararg values: String): Boolean =
+        values.all { v ->
+            val t = v.trim()
+            t.isNotBlank() && !t.endsWith("_DEFAULT_VALUE")
+        }
 
     fun refreshFxRate() {
         viewModelScope.launch {
@@ -680,12 +967,163 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setExecutionMode(mode: ExecutionMode) {
+        val creds = _exchangeConfigState.value.credentials
+        _tradeState.update {
+            it.copy(
+                executionMode = mode,
+                liveConnectors = liveTradingClient.getConnectorStatuses(creds),
+                statusBanner = if (mode == ExecutionMode.LIVE) {
+                    "LIVE MODE ARMED · Route: ${it.liveExecutionRoute.label}"
+                } else {
+                    "Switched back to Safe Paper Trading Mode."
+                }
+            )
+        }
+        viewModelScope.launch {
+            repository.logMemory(
+                eventType = if (mode == ExecutionMode.LIVE) "LIVE_MODE_ARMED" else "PAPER_MODE_RESTORED",
+                symbol = _tradeState.value.symbol,
+                summary = if (mode == ExecutionMode.LIVE) {
+                    "Operator armed LIVE execution via ${_tradeState.value.liveExecutionRoute.label}."
+                } else {
+                    "Operator switched execution desk back to PAPER mode."
+                }
+            )
+        }
+    }
+
+    fun selectLiveExecutionRoute(route: LiveExecutionRoute) {
+        val creds = _exchangeConfigState.value.credentials
+        val serverTarget = when (route) {
+            LiveExecutionRoute.LG_OWNER_SERVER -> LiveServerTarget.LG_OWNER
+            else -> LiveServerTarget.LG_PRIVATE
+        }
+        _tradeState.update {
+            it.copy(
+                liveExecutionRoute = route,
+                activeLiveServerTarget = serverTarget,
+                liveConnectors = liveTradingClient.getConnectorStatuses(creds),
+                statusBanner = "Live route selected: ${route.label}"
+            )
+        }
+    }
+
+    fun selectLiveServerTarget(target: LiveServerTarget) {
+        val route = when (target) {
+            LiveServerTarget.LG_PRIVATE -> LiveExecutionRoute.LG_PRIVATE_SERVER
+            LiveServerTarget.LG_OWNER -> LiveExecutionRoute.LG_OWNER_SERVER
+        }
+        _tradeState.update {
+            it.copy(
+                activeLiveServerTarget = target,
+                liveExecutionRoute = route
+            )
+        }
+        pingLiveServer(target)
+    }
+
+    fun pingLiveServers() {
+        pingLiveServer(LiveServerTarget.LG_PRIVATE)
+        pingLiveServer(LiveServerTarget.LG_OWNER)
+    }
+
+    fun pingLiveServer(target: LiveServerTarget) {
+        viewModelScope.launch {
+            _tradeState.update { state ->
+                when (target) {
+                    LiveServerTarget.LG_PRIVATE -> state.copy(
+                        privateServerHealth = state.privateServerHealth.copy(
+                            isChecking = true,
+                            statusDetail = "Waking & pinging lg-digital-private.onrender.com..."
+                        )
+                    )
+                    LiveServerTarget.LG_OWNER -> state.copy(
+                        ownerServerHealth = state.ownerServerHealth.copy(
+                            isChecking = true,
+                            statusDetail = "Waking & pinging lg-digital-owner.onrender.com..."
+                        )
+                    )
+                }
+            }
+            val creds = credentialStore.getCredentials()
+            val result = liveTradingClient.checkServerHealth(target, creds)
+            _tradeState.update { state ->
+                when (target) {
+                    LiveServerTarget.LG_PRIVATE -> state.copy(
+                        privateServerHealth = result,
+                        liveConnectors = liveTradingClient.getConnectorStatuses(creds)
+                    )
+                    LiveServerTarget.LG_OWNER -> state.copy(
+                        ownerServerHealth = result,
+                        liveConnectors = liveTradingClient.getConnectorStatuses(creds)
+                    )
+                }
+            }
+        }
+    }
+
     fun submitPaperOrder(isBuy: Boolean, notionalUsd: Double) {
         viewModelScope.launch {
             val state = _tradeState.value
             val price = currentPriceFor(state.symbol)
                 ?: cachedCandles.lastOrNull()?.close
                 ?: 0.0
+
+            if (state.executionMode == ExecutionMode.LIVE) {
+                val acct = _vaultState.value.account
+                val profile = RiskProfile.entries.firstOrNull { it.label == acct.riskProfile } ?: RiskProfile.MEDIUM
+                if (notionalUsd > profile.maxOrderUsd) {
+                    _tradeState.update {
+                        it.copy(
+                            statusBanner = "LIVE SAFETY BLOCK: Order $${"%.2f".format(notionalUsd)} exceeds ${profile.label} risk cap ($${profile.maxOrderUsd.toInt()})."
+                        )
+                    }
+                    return@launch
+                }
+                _tradeState.update {
+                    it.copy(
+                        isSubmittingLiveOrder = true,
+                        statusBanner = "Dispatching LIVE ${if (isBuy) "BUY" else "SELL"} ${state.symbol} via ${state.liveExecutionRoute.shortBadge}..."
+                    )
+                }
+                val creds = credentialStore.getCredentials()
+                val liveRes = liveTradingClient.executeLiveOrder(
+                    route = state.liveExecutionRoute,
+                    connectedExchange = state.connectedExchange,
+                    symbol = state.symbol,
+                    isBuy = isBuy,
+                    notionalUsd = notionalUsd,
+                    priceUsd = price,
+                    strategyId = "manual_${state.strategy.id}",
+                    stored = creds
+                )
+                liveRes.fold(
+                    onSuccess = { receipt ->
+                        val summary = "LIVE ${receipt.side} ${receipt.symbol} ($${"%.2f".format(receipt.notionalUsd)}) via ${receipt.route.shortBadge} · ID: ${receipt.exchangeOrderId} · ${receipt.statusText}"
+                        repository.logMemory("LIVE_ORDER_${receipt.side}", receipt.symbol, summary)
+                        _tradeState.update {
+                            it.copy(
+                                isSubmittingLiveOrder = false,
+                                statusBanner = summary,
+                                recentLiveReceipts = (listOf(receipt) + it.recentLiveReceipts).take(12)
+                            )
+                        }
+                    },
+                    onFailure = { err ->
+                        val errMsg = err.message ?: "Live order rejected"
+                        repository.logMemory("LIVE_ORDER_ERROR", state.symbol, errMsg)
+                        _tradeState.update {
+                            it.copy(
+                                isSubmittingLiveOrder = false,
+                                statusBanner = errMsg
+                            )
+                        }
+                    }
+                )
+                return@launch
+            }
+
             val res = if (isBuy) {
                 repository.executePaperBuy(
                     symbol = state.symbol,
@@ -711,11 +1149,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleAutopilot(enabled: Boolean) {
         viewModelScope.launch {
+            val modeLabel = if (_tradeState.value.executionMode == ExecutionMode.LIVE) {
+                "LIVE mode (${_tradeState.value.liveExecutionRoute.shortBadge})"
+            } else {
+                "paper mode"
+            }
             repository.updateAccountConfig(autopilotRunning = enabled)
             repository.logMemory(
                 eventType = if (enabled) "AUTOPILOT_START" else "AUTOPILOT_PAUSE",
                 symbol = _tradeState.value.symbol,
-                summary = if (enabled) "Adaptive Autopilot armed in paper mode." else "Adaptive Autopilot paused by operator."
+                summary = if (enabled) "Adaptive Autopilot armed in $modeLabel." else "Adaptive Autopilot paused by operator."
             )
         }
     }
@@ -863,9 +1306,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val msg = when (targetAction) {
                 SignalAction.BUY -> {
-                    val orderUsd = minOf(profile.maxOrderUsd, acct.usdBalance)
+                    val orderUsd = if (tradeSnap.executionMode == ExecutionMode.LIVE) {
+                        profile.maxOrderUsd
+                    } else {
+                        minOf(profile.maxOrderUsd, acct.usdBalance)
+                    }
                     if (orderUsd < 10.0) {
                         "Autopilot HOLD: Insufficient ${fiat.code} buying power."
+                    } else if (tradeSnap.executionMode == ExecutionMode.LIVE) {
+                        val creds = credentialStore.getCredentials()
+                        liveTradingClient.executeLiveOrder(
+                            route = tradeSnap.liveExecutionRoute,
+                            connectedExchange = tradeSnap.connectedExchange,
+                            symbol = targetSymbol,
+                            isBuy = true,
+                            notionalUsd = orderUsd,
+                            priceUsd = targetPrice,
+                            strategyId = "adaptive_${targetStrategy.id}",
+                            stored = creds
+                        ).fold(
+                            onSuccess = { receipt ->
+                                val txt = "LIVE Adaptive BUY [${receipt.route.shortBadge}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol · ID ${receipt.exchangeOrderId}"
+                                repository.logMemory("LIVE_AUTOPILOT_BUY", targetSymbol, txt)
+                                _tradeState.update { st -> st.copy(recentLiveReceipts = (listOf(receipt) + st.recentLiveReceipts).take(12)) }
+                                txt
+                            },
+                            onFailure = { err ->
+                                val errTxt = "LIVE Autopilot BUY note: ${err.message ?: "Rejected"}"
+                                repository.logMemory("LIVE_AUTOPILOT_ERR", targetSymbol, errTxt)
+                                errTxt
+                            }
+                        )
                     } else {
                         repository.executePaperBuy(targetSymbol, orderUsd, targetPrice, "adaptive_${targetStrategy.id}", targetReason)
                             .fold(
@@ -875,16 +1346,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 SignalAction.SELL -> {
-                    val holding = _vaultState.value.holdings.firstOrNull { it.symbol == targetSymbol }
-                    if (holding == null) {
-                        "Autopilot HOLD: SELL signal on $targetSymbol ($targetExchange), no open holding."
+                    if (tradeSnap.executionMode == ExecutionMode.LIVE) {
+                        val orderUsd = profile.maxOrderUsd
+                        val creds = credentialStore.getCredentials()
+                        liveTradingClient.executeLiveOrder(
+                            route = tradeSnap.liveExecutionRoute,
+                            connectedExchange = tradeSnap.connectedExchange,
+                            symbol = targetSymbol,
+                            isBuy = false,
+                            notionalUsd = orderUsd,
+                            priceUsd = targetPrice,
+                            strategyId = "adaptive_${targetStrategy.id}",
+                            stored = creds
+                        ).fold(
+                            onSuccess = { receipt ->
+                                val txt = "LIVE Adaptive SELL [${receipt.route.shortBadge}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol · ID ${receipt.exchangeOrderId}"
+                                repository.logMemory("LIVE_AUTOPILOT_SELL", targetSymbol, txt)
+                                _tradeState.update { st -> st.copy(recentLiveReceipts = (listOf(receipt) + st.recentLiveReceipts).take(12)) }
+                                txt
+                            },
+                            onFailure = { err ->
+                                val errTxt = "LIVE Autopilot SELL note: ${err.message ?: "Rejected"}"
+                                repository.logMemory("LIVE_AUTOPILOT_ERR", targetSymbol, errTxt)
+                                errTxt
+                            }
+                        )
                     } else {
-                        val orderUsd = minOf(profile.maxOrderUsd, holding.quantity * targetPrice)
-                        repository.executePaperSell(targetSymbol, orderUsd, targetPrice, "adaptive_${targetStrategy.id}", targetReason)
-                            .fold(
-                                { "Adaptive SELL [$targetExchange · ${fiat.code}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol via ${targetStrategy.title}" },
-                                { it.message ?: "Sell blocked" }
-                            )
+                        val holding = _vaultState.value.holdings.firstOrNull { it.symbol == targetSymbol }
+                        if (holding == null) {
+                            "Autopilot HOLD: SELL signal on $targetSymbol ($targetExchange), no open holding."
+                        } else {
+                            val orderUsd = minOf(profile.maxOrderUsd, holding.quantity * targetPrice)
+                            repository.executePaperSell(targetSymbol, orderUsd, targetPrice, "adaptive_${targetStrategy.id}", targetReason)
+                                .fold(
+                                    { "Adaptive SELL [$targetExchange · ${fiat.code}]: ${Formatters.formatFiat(orderUsd, fiat, fx)} $targetSymbol via ${targetStrategy.title}" },
+                                    { it.message ?: "Sell blocked" }
+                                )
+                        }
                     }
                 }
                 SignalAction.HOLD -> {

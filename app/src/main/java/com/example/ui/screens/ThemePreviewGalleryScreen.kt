@@ -60,6 +60,7 @@ import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.LgCircuitBackground
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.AppColorTheme
+import com.example.ui.theme.LgBrandFontFamily
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TabLabelTextStyle
 import com.example.ui.theme.TradingViewFontFamily
@@ -275,8 +276,10 @@ private fun ThemePreviewMiniCard(
                     Column {
                         Text(
                             text = "LG DIGITAL",
-                            fontFamily = TradingViewFontFamily,
+                            fontFamily = LgBrandFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
                             fontSize = 9.5.sp,
+                            letterSpacing = 1.2.sp,
                             color = p.goldBright,
                             maxLines = 1
                         )

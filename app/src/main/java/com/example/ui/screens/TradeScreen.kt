@@ -19,9 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +41,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -56,7 +62,10 @@ import com.example.domain.models.BaseFiatCurrency
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
 import com.example.domain.models.ConnectedExchange
+import com.example.domain.models.ExecutionMode
 import com.example.domain.models.IndicatorBacktestConfig
+import com.example.domain.models.LiveExecutionRoute
+import com.example.domain.models.LiveServerTarget
 import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
@@ -70,6 +79,7 @@ import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
 import com.example.ui.components.IndicatorBacktesterView
 import com.example.ui.components.LiveAutoFeedBadge
+import com.example.ui.components.LiveServerAndExecutionCard
 import com.example.ui.components.MetricTile
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SignalBadge
@@ -86,7 +96,7 @@ import com.example.viewmodel.TradeUiState
 import com.example.viewmodel.VaultUiState
 
 enum class TradeSubWorkspace(val label: String) {
-    ORDER("Paper Ticket"),
+    ORDER("Order Ticket"),
     BACKTEST("Backtest Lab"),
     STRATEGIES("Strategies")
 }
@@ -110,13 +120,19 @@ fun TradeScreen(
     onSelectBaseCurrency: (BaseFiatCurrency) -> Unit = {},
     onSelectConnectedExchange: (ConnectedExchange) -> Unit = {},
     onScanExchangeMarket: () -> Unit = {},
-    onApplyAdaptiveOpportunity: (AdaptiveOpportunity) -> Unit = {}
+    onApplyAdaptiveOpportunity: (AdaptiveOpportunity) -> Unit = {},
+    onSetExecutionMode: (ExecutionMode) -> Unit = {},
+    onSelectLiveRoute: (LiveExecutionRoute) -> Unit = {},
+    onPingLiveServers: () -> Unit = {},
+    onOpenLiveLgPortal: (LiveServerTarget) -> Unit = {},
+    onOpenExchangeConfig: () -> Unit = {}
 ) {
     var localSubPanel by remember { mutableStateOf(activeWorkspace) }
     val activeSubPanel = if (onSelectWorkspace != null) activeWorkspace else localSubPanel
     fun chooseSubPanel(target: TradeSubWorkspace) {
         if (onSelectWorkspace != null) onSelectWorkspace(target) else localSubPanel = target
     }
+    var showConfirmLiveDialog by remember { mutableStateOf(false) }
     var orderAmountText by remember { mutableStateOf("250") }
     var scheduleText by remember(vaultState.account.stopSchedule) { mutableStateOf(vaultState.account.stopSchedule) }
     var stopScheduleEnabled by remember(vaultState.account.stopSchedule) {
@@ -129,6 +145,64 @@ fun TradeScreen(
         mutableStateOf(RiskProfile.entries.firstOrNull { it.label == vaultState.account.riskProfile } ?: RiskProfile.MEDIUM)
     }
     var htfConfirm by remember(vaultState.account.htfConfirmation) { mutableStateOf(vaultState.account.htfConfirmation) }
+
+    if (showConfirmLiveDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmLiveDialog = false },
+            containerColor = LgColors.PanelSlate,
+            titleContentColor = LgColors.GoldBright,
+            textContentColor = LgColors.InkPrimary,
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = LgColors.GoldBright
+                )
+            },
+            title = { Text("Arm Live Trading Mode?", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Orders and Adaptive Autopilot ticks will route LIVE through ${state.liveExecutionRoute.label}.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Active Risk Cap: ${selectedRisk.label} (max $${selectedRisk.maxOrderUsd.toInt()} per live order).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LgColors.Turquoise
+                    )
+                    Text(
+                        text = "Your Kraken Pro & Coinbase APIs are already connected on lg-digital-private.onrender.com.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LgColors.InkSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmLiveDialog = false
+                        onSetExecutionMode(ExecutionMode.LIVE)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LgColors.Turquoise,
+                        contentColor = LgColors.ObsidianBg
+                    ),
+                    modifier = Modifier.testTag("confirm_arm_live_mode_button")
+                ) {
+                    Text("ARM LIVE MODE", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showConfirmLiveDialog = false },
+                    modifier = Modifier.testTag("cancel_arm_live_mode_button")
+                ) {
+                    Text("Stay Paper", color = LgColors.Gold)
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -313,19 +387,47 @@ fun TradeScreen(
         when (activeSubPanel) {
             TradeSubWorkspace.ORDER -> {
                 item {
+                    LiveServerAndExecutionCard(
+                        state = state,
+                        selectedRisk = selectedRisk,
+                        onRequestArmLive = { showConfirmLiveDialog = true },
+                        onSwitchToPaper = { onSetExecutionMode(ExecutionMode.PAPER) },
+                        onSelectLiveRoute = onSelectLiveRoute,
+                        onPingLiveServers = onPingLiveServers,
+                        onOpenLiveLgPortal = onOpenLiveLgPortal,
+                        onOpenExchangeConfig = onOpenExchangeConfig
+                    )
+                }
+                item {
+                    val isLive = state.executionMode == ExecutionMode.LIVE
                     val currentHolding = vaultState.holdings.firstOrNull { it.symbol == state.symbol }
-                    CyberFrameCard(title = "PAPER ORDER TICKET") {
+                    CyberFrameCard(
+                        title = if (isLive) {
+                            "LIVE ORDER TICKET · ${state.liveExecutionRoute.shortBadge}"
+                        } else {
+                            "PAPER ORDER TICKET"
+                        }
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Available Cash: ${Formatters.formatUsd(vaultState.account.usdBalance)}",
+                                text = if (isLive) {
+                                    "Live Cap: $${selectedRisk.maxOrderUsd.toInt()}/order (${selectedRisk.label})"
+                                } else {
+                                    "Available Cash: ${Formatters.formatUsd(vaultState.account.usdBalance)}"
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = LgColors.InkSecondary
+                                color = if (isLive) LgColors.Turquoise else LgColors.InkSecondary
                             )
-                            if (currentHolding != null) {
+                            if (isLive) {
+                                StatusPill(
+                                    text = "LIVE ARMED",
+                                    color = LgColors.Turquoise
+                                )
+                            } else if (currentHolding != null) {
                                 StatusPill(
                                     text = "${Formatters.formatQty(currentHolding.quantity)} ${state.symbol}",
                                     color = LgColors.CyanGlow
@@ -345,7 +447,7 @@ fun TradeScreen(
                         OutlinedTextField(
                             value = orderAmountText,
                             onValueChange = { orderAmountText = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                            label = { Text("Order Notional (USD)") },
+                            label = { Text(if (isLive) "Live Order Notional (USD)" else "Order Notional (USD)") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = LgColors.Turquoise,
@@ -365,23 +467,63 @@ fun TradeScreen(
                             val parsed = orderAmountText.toDoubleOrNull() ?: 0.0
                             Button(
                                 onClick = { onSubmitPaperOrder(true, parsed) },
+                                enabled = !state.isSubmittingLiveOrder,
                                 colors = ButtonDefaults.buttonColors(containerColor = LgColors.Turquoise, contentColor = LgColors.ObsidianBg),
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 48.dp)
                                     .testTag("paper_buy_button")
                             ) {
-                                Text("Buy ${state.symbol}", fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (isLive) "LIVE BUY ${state.symbol}" else "Buy ${state.symbol}",
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                             Button(
                                 onClick = { onSubmitPaperOrder(false, parsed) },
+                                enabled = !state.isSubmittingLiveOrder,
                                 colors = ButtonDefaults.buttonColors(containerColor = LgColors.Crimson, contentColor = LgColors.ObsidianBg),
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 48.dp)
                                     .testTag("paper_sell_button")
                             ) {
-                                Text("Sell ${state.symbol}", fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (isLive) "LIVE SELL ${state.symbol}" else "Sell ${state.symbol}",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        if (state.recentLiveReceipts.isNotEmpty()) {
+                            Text(
+                                text = "RECENT LIVE DISPATCH RECEIPTS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LgColors.Gold
+                            )
+                            state.recentLiveReceipts.take(4).forEach { r ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LgColors.ObsidianBg.copy(alpha = 0.72f))
+                                        .border(1.dp, LgColors.Turquoise.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "${r.side} ${r.symbol} · ${Formatters.formatUsd(r.notionalUsd)} (${r.route.shortBadge})",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = LgColors.GoldBright
+                                        )
+                                        Text(
+                                            text = "ID: ${r.exchangeOrderId} · ${r.statusText}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LgColors.InkSecondary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

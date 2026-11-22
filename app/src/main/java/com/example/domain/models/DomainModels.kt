@@ -263,11 +263,109 @@ enum class ConnectedExchange(
     val shortLabel: String
 ) {
     ALL_CONNECTED("all", "All Connected Exchanges", "ALL"),
-    KRAKEN("kraken", "Kraken Spot", "Kraken"),
+    KRAKEN("kraken", "Kraken Pro", "Kraken"),
+    COINBASE("coinbase", "Coinbase Advanced", "Coinbase"),
     KUCOIN("kucoin", "KuCoin Spot", "KuCoin"),
-    COINBASE("coinbase", "Coinbase Spot", "Coinbase"),
     BITSTAMP("bitstamp", "Bitstamp Spot", "Bitstamp")
 }
+
+enum class ExecutionMode(val label: String) {
+    PAPER("PAPER"),
+    LIVE("LIVE")
+}
+
+enum class LiveServerTarget(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val baseUrl: String,
+    val host: String
+) {
+    LG_PRIVATE(
+        id = "lg_private",
+        title = "LG Private Server",
+        subtitle = "Kraken Pro + Coinbase already connected",
+        baseUrl = "https://lg-digital-private.onrender.com",
+        host = "lg-digital-private.onrender.com"
+    ),
+    LG_OWNER(
+        id = "lg_owner",
+        title = "LG Owner Server",
+        subtitle = "Owner live control desk & bot telemetry",
+        baseUrl = "https://lg-digital-owner.onrender.com",
+        host = "lg-digital-owner.onrender.com"
+    )
+}
+
+enum class LiveExecutionRoute(
+    val id: String,
+    val label: String,
+    val shortBadge: String,
+    val description: String
+) {
+    LG_PRIVATE_SERVER(
+        id = "lg_private_server",
+        label = "LG Private Server (Kraken + Coinbase)",
+        shortBadge = "LG PRIVATE",
+        description = "Routes orders through your live Render server at lg-digital-private.onrender.com"
+    ),
+    LG_OWNER_SERVER(
+        id = "lg_owner_server",
+        label = "LG Owner Server",
+        shortBadge = "LG OWNER",
+        description = "Routes orders through your live Render server at lg-digital-owner.onrender.com"
+    ),
+    KRAKEN_DIRECT(
+        id = "kraken_direct",
+        label = "Kraken Pro Direct API",
+        shortBadge = "KRAKEN PRO",
+        description = "Direct HMAC-SHA512 signed spot orders on Kraken Pro"
+    ),
+    COINBASE_DIRECT(
+        id = "coinbase_direct",
+        label = "Coinbase Advanced Direct API",
+        shortBadge = "COINBASE",
+        description = "Direct signed spot orders on Coinbase Advanced Trade"
+    ),
+    KUCOIN_DIRECT(
+        id = "kucoin_direct",
+        label = "KuCoin Spot Direct API",
+        shortBadge = "KUCOIN",
+        description = "Direct HMAC-SHA256 signed spot orders on KuCoin"
+    ),
+    BITSTAMP_DIRECT(
+        id = "bitstamp_direct",
+        label = "Bitstamp Direct API",
+        shortBadge = "BITSTAMP",
+        description = "Direct v2 HMAC-SHA256 signed spot orders on Bitstamp"
+    )
+}
+
+data class LiveServerHealth(
+    val target: LiveServerTarget,
+    val isOnline: Boolean,
+    val isChecking: Boolean = false,
+    val httpCode: Int = 0,
+    val latencyMs: Long = 0L,
+    val statusDetail: String = "Tap Ping to check Render server",
+    val checkedAtMs: Long = 0L
+)
+
+data class LiveConnectorStatus(
+    val route: LiveExecutionRoute,
+    val isConfigured: Boolean,
+    val detail: String
+)
+
+data class LiveOrderReceipt(
+    val route: LiveExecutionRoute,
+    val exchangeOrderId: String,
+    val symbol: String,
+    val side: String,
+    val notionalUsd: Double,
+    val statusText: String,
+    val timestampMs: Long = System.currentTimeMillis()
+)
 
 data class ExchangeMarketTicker(
     val symbol: String,

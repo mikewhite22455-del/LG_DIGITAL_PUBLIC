@@ -105,7 +105,8 @@ fun VaultScreen(
     membershipProfile: MembershipBillingProfile = MembershipBillingProfile(),
     onOpenMembershipBilling: () -> Unit = {},
     activeThemeName: String = LgThemeState.activeTheme.displayName,
-    onOpenThemePreviews: () -> Unit = {}
+    onOpenThemePreviews: () -> Unit = {},
+    onOpenExchangeConfig: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val biometricCapability = remember { BiometricAuthManager.checkCapability(context) }
@@ -337,6 +338,13 @@ fun VaultScreen(
                 }
 
                 Text("ACCOUNT SECURITY", style = MaterialTheme.typography.labelMedium, color = LgColors.InkMuted)
+                GoldMetallicButton(
+                    text = "EXCHANGE CONFIGURATION (AES-256 VAULT)",
+                    onClick = onOpenExchangeConfig,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("vault_open_exchange_config_button")
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

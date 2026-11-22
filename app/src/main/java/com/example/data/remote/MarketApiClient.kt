@@ -639,6 +639,7 @@ class MarketApiClient {
                 ConnectedExchange.COINBASE -> listOf("Coinbase" to { scanCoinbaseFullExchange() })
                 ConnectedExchange.ALL_CONNECTED -> listOf(
                     "Kraken" to { scanKrakenFullExchange(usdToCadRate) },
+                    "Coinbase" to { scanCoinbaseFullExchange() },
                     "KuCoin" to { scanKuCoinFullExchange() },
                     "Bitstamp" to { scanBitstampFullExchange() }
                 )
@@ -876,6 +877,208 @@ class MarketApiClient {
         usdProducts.size to tickers
     }
 
+    /**
+     * Fetches real-time primary-pair spot market data concurrently from the requested exchanges
+     * (Kraken, Coinbase, KuCoin, Bitstamp) for the Price Summary Dashboard list.
+     */
+    suspend fun fetchPrimaryPairsForExchanges(
+        exchangeIds: List<String>,
+        configuredExchangeIds: Set<String>,
+        symbols: List<String> = DEFAULT_PRIMARY_PAIRS
+    ): Result<List<com.example.viewmodel.ConfiguredExchangePriceRow>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val targets = exchangeIds.map { it.lowercase() }.distinct()
+            val symbolOrder = symbols.withIndex().associate { it.value to it.index }
+            val fetched = coroutineScope {
+                targets.map { exId ->
+                    async(Dispatchers.IO) {
+                        val isConfigured = exId in configuredExchangeIds
+                        runCatching {
+                            when (exId) {
+                                "kraken" -> fetchKrakenPrimaryPairs(symbols, isConfigured)
+                                "coinbase" -> fetchCoinbasePrimaryPairs(symbols, isConfigured)
+                                "kucoin" -> fetchKuCoinPrimaryPairs(symbols, isConfigured)
+                                "bitstamp" -> fetchBitstampPrimaryPairs(symbols, isConfigured)
+                                else -> emptyList()
+                            }
+                        }.getOrDefault(emptyList())
+                    }
+                }.awaitAll().flatten()
+            }
+            if (fetched.isEmpty()) {
+                throw IllegalStateException("Live exchange price feeds temporarily unavailable")
+            }
+            fetched.sortedWith(
+                compareBy<com.example.viewmodel.ConfiguredExchangePriceRow>(
+                    { symbolOrder[it.symbol] ?: 99 },
+                    { targets.indexOf(it.exchangeId).let { idx -> if (idx < 0) 99 else idx } }
+                )
+            )
+        }
+    }
+
+    private fun fetchKrakenPrimaryPairs(
+        symbols: List<String>,
+        isApiConfigured: Boolean
+    ): List<com.example.viewmodel.ConfiguredExchangePriceRow> {
+        val krakenPairQuery = symbols.joinToString(",") { sym ->
+            when (sym.uppercase()) {
+                "BTC" -> "XBTUSD"
+                "DOGE" -> "XDGUSD"
+                else -> "${sym.uppercase()}USD"
+            }
+        }
+        val root = JSONObject(fetchString("https://api.kraken.com/0/public/Ticker?pair=$krakenPairQuery"))
+        val errs = root.optJSONArray("error")
+        if (errs != null && errs.length() > 0) {
+            throw IllegalStateException("Kraken Ticker: ${errs.optString(0)}")
+        }
+        val res = root.optJSONObject("result") ?: return emptyList()
+        val now = System.currentTimeMillis()
+        val symbolSet = symbols.map { it.uppercase() }.toSet()
+        val out = mutableListOf<com.example.viewmodel.ConfiguredExchangePriceRow>()
+        val keys = res.keys()
+        while (keys.hasNext()) {
+            val rawPair = keys.next()
+            val rawBase = rawPair.removeSuffix("ZUSD").removeSuffix("USD")
+            val sym = normalizeKrakenBase(rawBase)
+            if (sym !in symbolSet) continue
+            val obj = res.optJSONObject(rawPair) ?: continue
+            val last = obj.optJSONArray("c")?.optString(0)?.toDoubleOrNull() ?: 0.0
+            if (last <= 0.0) continue
+            val open = obj.optString("o", "0").toDoubleOrNull() ?: 0.0
+            val volBase = obj.optJSONArray("v")?.optString(1)?.toDoubleOrNull() ?: 0.0
+            val high = obj.optJSONArray("h")?.optString(1)?.toDoubleOrNull() ?: last
+            val low = obj.optJSONArray("l")?.optString(1)?.toDoubleOrNull() ?: last
+            val changePct = if (open > 0.0) ((last - open) / open) * 100.0 else 0.0
+            out += com.example.viewmodel.ConfiguredExchangePriceRow(
+                id = "kraken_$sym",
+                exchangeId = "kraken",
+                exchangeName = "Kraken Pro",
+                symbol = sym,
+                pairLabel = "$sym/USD",
+                priceUsd = last,
+                change24hPct = changePct,
+                high24h = high,
+                low24h = low,
+                volume24hUsd = volBase * last,
+                isApiConfigured = isApiConfigured,
+                fetchedAtMs = now
+            )
+        }
+        return out
+    }
+
+    private suspend fun fetchCoinbasePrimaryPairs(
+        symbols: List<String>,
+        isApiConfigured: Boolean
+    ): List<com.example.viewmodel.ConfiguredExchangePriceRow> = coroutineScope {
+        val now = System.currentTimeMillis()
+        symbols.map { rawSym ->
+            val sym = rawSym.uppercase()
+            async(Dispatchers.IO) {
+                runCatching {
+                    val productId = "$sym-USD"
+                    val st = JSONObject(fetchString("https://api.exchange.coinbase.com/products/$productId/stats"))
+                    val last = st.optString("last", "0").toDoubleOrNull() ?: 0.0
+                    if (last <= 0.0) return@runCatching null
+                    val open = st.optString("open", "0").toDoubleOrNull() ?: 0.0
+                    val volBase = st.optString("volume", "0").toDoubleOrNull() ?: 0.0
+                    val high = st.optString("high", "0").toDoubleOrNull() ?: last
+                    val low = st.optString("low", "0").toDoubleOrNull() ?: last
+                    val changePct = if (open > 0.0) ((last - open) / open) * 100.0 else 0.0
+                    com.example.viewmodel.ConfiguredExchangePriceRow(
+                        id = "coinbase_$sym",
+                        exchangeId = "coinbase",
+                        exchangeName = "Coinbase",
+                        symbol = sym,
+                        pairLabel = "$sym/USD",
+                        priceUsd = last,
+                        change24hPct = changePct,
+                        high24h = high,
+                        low24h = low,
+                        volume24hUsd = volBase * last,
+                        isApiConfigured = isApiConfigured,
+                        fetchedAtMs = now
+                    )
+                }.getOrNull()
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    private fun fetchKuCoinPrimaryPairs(
+        symbols: List<String>,
+        isApiConfigured: Boolean
+    ): List<com.example.viewmodel.ConfiguredExchangePriceRow> {
+        val body = fetchString("https://api.kucoin.com/api/v1/market/allTickers")
+        val arr = JSONObject(body).getJSONObject("data").getJSONArray("ticker")
+        val targetPairs = symbols.associate { "${it.uppercase()}-USDT" to it.uppercase() }
+        val now = System.currentTimeMillis()
+        val out = mutableListOf<com.example.viewmodel.ConfiguredExchangePriceRow>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val pair = obj.optString("symbol")
+            val sym = targetPairs[pair] ?: continue
+            val last = obj.optString("last", "0").toDoubleOrNull() ?: 0.0
+            if (last <= 0.0) continue
+            val changePct = (obj.optString("changeRate", "0").toDoubleOrNull() ?: 0.0) * 100.0
+            val high = obj.optString("high", "0").toDoubleOrNull() ?: last
+            val low = obj.optString("low", "0").toDoubleOrNull() ?: last
+            val volUsd = obj.optString("volValue", "0").toDoubleOrNull() ?: 0.0
+            out += com.example.viewmodel.ConfiguredExchangePriceRow(
+                id = "kucoin_$sym",
+                exchangeId = "kucoin",
+                exchangeName = "KuCoin",
+                symbol = sym,
+                pairLabel = "$sym/USDT",
+                priceUsd = last,
+                change24hPct = changePct,
+                high24h = high,
+                low24h = low,
+                volume24hUsd = volUsd,
+                isApiConfigured = isApiConfigured,
+                fetchedAtMs = now
+            )
+        }
+        return out
+    }
+
+    private fun fetchBitstampPrimaryPairs(
+        symbols: List<String>,
+        isApiConfigured: Boolean
+    ): List<com.example.viewmodel.ConfiguredExchangePriceRow> {
+        val arr = JSONArray(fetchString("https://www.bitstamp.net/api/v2/ticker/"))
+        val targetPairs = symbols.associate { "${it.uppercase()}/USD" to it.uppercase() }
+        val now = System.currentTimeMillis()
+        val out = mutableListOf<com.example.viewmodel.ConfiguredExchangePriceRow>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val pair = obj.optString("pair")
+            val sym = targetPairs[pair] ?: continue
+            val last = obj.optString("last", "0").toDoubleOrNull() ?: 0.0
+            if (last <= 0.0) continue
+            val changePct = obj.optString("percent_change_24", "0").toDoubleOrNull() ?: 0.0
+            val high = obj.optString("high", "0").toDoubleOrNull() ?: last
+            val low = obj.optString("low", "0").toDoubleOrNull() ?: last
+            val volBase = obj.optString("volume", "0").toDoubleOrNull() ?: 0.0
+            out += com.example.viewmodel.ConfiguredExchangePriceRow(
+                id = "bitstamp_$sym",
+                exchangeId = "bitstamp",
+                exchangeName = "Bitstamp",
+                symbol = sym,
+                pairLabel = pair,
+                priceUsd = last,
+                change24hPct = changePct,
+                high24h = high,
+                low24h = low,
+                volume24hUsd = volBase * last,
+                isApiConfigured = isApiConfigured,
+                fetchedAtMs = now
+            )
+        }
+        return out
+    }
+
     private fun normalizeKrakenBase(rawBase: String): String = when (rawBase.uppercase()) {
         "XXBT", "XBT" -> "BTC"
         "XETH" -> "ETH"
@@ -891,6 +1094,8 @@ class MarketApiClient {
     }
 
     companion object {
+        val DEFAULT_PRIMARY_PAIRS = listOf("BTC", "ETH", "SOL", "XRP", "ADA", "DOGE")
+
         fun classifyFearGreed(score: Int): String = when {
             score < 25 -> "Extreme Fear"
             score < 45 -> "Fear"
