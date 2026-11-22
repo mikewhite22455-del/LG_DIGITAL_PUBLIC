@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -75,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.GoldMetallicButton
@@ -168,14 +170,15 @@ fun WelcomeSignInScreen(
                     onClick = {}
                 )
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 14.dp, vertical = 14.dp)
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
                 .testTag("welcome_signin_root"),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .widthIn(max = 520.dp)
+                    .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
                     .border(2.dp, LgColors.GoldBright, RoundedCornerShape(22.dp))
                     .padding(2.dp)
@@ -241,6 +244,7 @@ fun WelcomeSignInScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .imePadding()
                         .padding(horizontal = 18.dp, vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -554,6 +558,10 @@ private fun MemberSignInContent(
 
         AlertDialog(
             onDismissRequest = { activeSocialDialog = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .imePadding(),
             containerColor = LgColors.PanelSlate,
             title = {
                 Row(
@@ -569,7 +577,12 @@ private fun MemberSignInContent(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
                         text = "Connect your ${provider.label} member profile to unlock your LG Digital desk session.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -644,8 +657,8 @@ private fun MemberSignInContent(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
             .widthIn(max = 500.dp)
+            .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
