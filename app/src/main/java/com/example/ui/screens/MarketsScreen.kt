@@ -70,6 +70,7 @@ import com.example.ui.components.CoinAvatar
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
+import com.example.ui.components.HourlyTrendSparkline
 import com.example.ui.components.MetricTile
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.LgColors
@@ -715,15 +716,27 @@ private fun MarketTickerRow(
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = Formatters.formatUsd(ticker.priceUsd),
-                    style = MaterialTheme.typography.labelLarge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HourlyTrendSparkline(
+                    prices = ticker.hourlyPrices,
+                    positive = up,
+                    modifier = Modifier
+                        .width(60.dp)
+                        .height(26.dp)
                 )
-                StatusPill(
-                    text = Formatters.formatPct(ticker.change24hPct),
-                    color = if (up) LgColors.Turquoise else LgColors.Crimson
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = Formatters.formatUsd(ticker.priceUsd),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    StatusPill(
+                        text = Formatters.formatPct(ticker.change24hPct),
+                        color = if (up) LgColors.Turquoise else LgColors.Crimson
+                    )
+                }
             }
         }
     }

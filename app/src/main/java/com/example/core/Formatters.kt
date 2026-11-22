@@ -67,4 +67,9 @@ object Formatters {
         }
         return sdf.format(Date(epochMillis))
     }
+
+    fun formatHourMinute(epochMillis: Long): String {
+        val sdf = SimpleDateFormat("HH:mm", Locale.US)
+        return sdf.format(Date(epochMillis))
+    }
 }

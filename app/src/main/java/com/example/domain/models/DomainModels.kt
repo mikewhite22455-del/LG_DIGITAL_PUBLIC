@@ -17,7 +17,8 @@ data class MarketTicker(
     val marketCapUsd: Double,
     val high24h: Double,
     val low24h: Double,
-    val source: String
+    val source: String,
+    val hourlyPrices: List<Double> = emptyList()
 )
 
 data class MarketBreadth(
@@ -37,6 +38,25 @@ data class Candle(
     val low: Double,
     val close: Double,
     val volume: Double
+)
+
+enum class HistoryWindow(
+    val label: String,
+    val subtitle: String,
+    val krakenInterval: Int,
+    val kuType: String,
+    val candleCount: Int,
+    val cgDays: String,
+    val lookbackSec: Long
+) {
+    H1("1H", "1-Hour", 1, "1min", 60, "1", 3600L),
+    H24("24H", "24-Hour", 15, "15min", 96, "1", 86400L),
+    D7("7D", "7-Day", 60, "1hour", 168, "7", 7L * 86400L)
+}
+
+data class PriceHistoryPoint(
+    val timestampSec: Long,
+    val priceUsd: Double
 )
 
 enum class ChartTimeframe(val label: String, val krakenInterval: Int, val barsPerDay: Int) {
@@ -105,6 +125,83 @@ data class BacktestResult(
     val slippageBps: Double,
     val equityCurve: List<Double>,
     val recentTrades: List<BacktestTrade>
+)
+
+enum class TechnicalIndicatorType(
+    val id: String,
+    val label: String,
+    val shortDesc: String
+) {
+    RSI("rsi", "RSI", "Relative Strength oversold/overbought"),
+    MACD("macd", "MACD", "EMA momentum & signal line crossover"),
+    BOLLINGER("bollinger", "Bollinger Bands", "Rolling SMA ± σ volatility envelope")
+}
+
+enum class ConfluenceRule(val label: String) {
+    ANY("Any Indicator (OR)"),
+    ALL("All Selected (AND)")
+}
+
+data class IndicatorBacktestConfig(
+    val selectedIndicators: Set<TechnicalIndicatorType> = setOf(
+        TechnicalIndicatorType.RSI,
+        TechnicalIndicatorType.MACD
+    ),
+    val confluenceRule: ConfluenceRule = ConfluenceRule.ANY,
+    val initialCapitalUsd: Double = 10000.0,
+    val rsiPeriod: Int = 14,
+    val rsiOversold: Double = 32.0,
+    val rsiOverbought: Double = 68.0,
+    val macdFast: Int = 12,
+    val macdSlow: Int = 26,
+    val macdSignal: Int = 9,
+    val bbPeriod: Int = 20,
+    val bbStdDev: Double = 2.0,
+    val feeBps: Double = 10.0,
+    val slippageBps: Double = 5.0
+)
+
+data class SimulatedSignalMarker(
+    val candleIndex: Int,
+    val timestampSec: Long,
+    val action: SignalAction,
+    val priceUsd: Double,
+    val entryPriceUsd: Double? = null,
+    val returnPct: Double? = null,
+    val pnlUsd: Double? = null,
+    val reason: String
+)
+
+data class EquityCurvePoint(
+    val candleIndex: Int,
+    val timestampSec: Long,
+    val priceUsd: Double,
+    val strategyEquityUsd: Double,
+    val buyHoldEquityUsd: Double,
+    val rsiValue: Double?,
+    val macdHistogram: Double?,
+    val bbUpper: Double?,
+    val bbMid: Double?,
+    val bbLower: Double?
+)
+
+data class IndicatorBacktestResult(
+    val symbol: String,
+    val timeframe: ChartTimeframe,
+    val config: IndicatorBacktestConfig,
+    val initialCapitalUsd: Double,
+    val finalEquityUsd: Double,
+    val totalReturnPct: Double,
+    val buyHoldReturnPct: Double,
+    val alphaPct: Double,
+    val winRatePct: Double,
+    val maxDrawdownPct: Double,
+    val profitFactor: Double,
+    val totalTrades: Int,
+    val winningTrades: Int,
+    val equityPoints: List<EquityCurvePoint>,
+    val markers: List<SimulatedSignalMarker>,
+    val closedTrades: List<SimulatedSignalMarker>
 )
 
 data class ResearchProjection(

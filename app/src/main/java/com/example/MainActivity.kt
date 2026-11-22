@@ -77,15 +77,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.core.Formatters
 import com.example.core.configureAppCheck
+import com.example.domain.models.IndicatorBacktestConfig
 import com.example.ui.components.StatusPill
 import com.example.ui.screens.AdvisorScreen
 import com.example.ui.screens.AllPagesPreviewOverlay
+import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.HelpWalkthroughSheet
 import com.example.ui.screens.LabsScreen
 import com.example.ui.screens.LabsTool
-import com.example.ui.screens.MarketsScreen
 import com.example.ui.screens.PreviewDestination
 import com.example.ui.screens.TradeScreen
+import com.example.ui.screens.TradeSubWorkspace
 import com.example.ui.screens.VaultScreen
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.LgDigitalTheme
@@ -154,6 +156,7 @@ fun LgDigitalAppShell(
     val advisorState by viewModel.advisorState.collectAsStateWithLifecycle()
 
     var selectedLabsTool by remember { mutableStateOf(LabsTool.ARBITRAGE) }
+    var selectedTradeWorkspace by remember { mutableStateOf(TradeSubWorkspace.ORDER) }
     var showHelpSheet by remember { mutableStateOf(false) }
     var showAllPagesPreview by remember { mutableStateOf(false) }
 
@@ -258,7 +261,11 @@ fun LgDigitalAppShell(
             onResetPortfolio = viewModel::resetPaperPortfolio,
             onRemoveWatchlist = viewModel::removeFromWatchlist,
             onAddWatchWallet = viewModel::addWatchWallet,
-            onRemoveWatchWallet = viewModel::removeWatchWallet
+            onRemoveWatchWallet = viewModel::removeWatchWallet,
+            onSelectHistoryAsset = viewModel::selectHistoryAsset,
+            onSelectHistoryWindow = viewModel::selectHistoryWindow,
+            onRefreshHistory = viewModel::refreshAssetHistory,
+            onUpdateIndicatorBacktestConfig = viewModel::updateIndicatorBacktestConfig
         )
     }
 
@@ -427,13 +434,27 @@ fun LgDigitalAppShell(
                         .widthIn(max = 1080.dp)
                 ) {
                     composable<MarketsRoute> {
-                        MarketsScreen(
-                            state = marketsState,
+                        DashboardScreen(
+                            marketsState = marketsState,
+                            arbitrageState = arbitrageState,
                             vaultState = vaultState,
                             isWide = isWide,
-                            onRefreshMarkets = viewModel::refreshMarkets,
+                            onRefreshAll = {
+                                viewModel.refreshMarkets()
+                                viewModel.scanArbitrage()
+                                viewModel.refreshAssetHistory()
+                            },
                             onRefreshNews = viewModel::refreshNews,
                             onSearchChange = viewModel::updateMarketSearch,
+                            onToggleArbMode = { mode ->
+                                viewModel.updateArbitrageParams(mode = mode)
+                            },
+                            onScanArbitrage = viewModel::scanArbitrage,
+                            onExecuteOpportunity = viewModel::executeArbitrageOpportunity,
+                            onOpenArbitrageDesk = {
+                                selectedLabsTool = LabsTool.ARBITRAGE
+                                navigateToTab(LabsRoute)
+                            },
                             onSelectCoinForTrade = { sym ->
                                 viewModel.selectTradeSymbol(sym)
                                 navigateToTab(TradeRoute)
@@ -456,7 +477,15 @@ fun LgDigitalAppShell(
                                 navigateToTab(LabsRoute)
                             },
                             onNavigateToTrade = { navigateToTab(TradeRoute) },
-                            onOpenAllPagesPreview = { showAllPagesPreview = true }
+                            onOpenAllPagesPreview = { showAllPagesPreview = true },
+                            onSelectHistoryAsset = viewModel::selectHistoryAsset,
+                            onSelectHistoryWindow = viewModel::selectHistoryWindow,
+                            onRefreshHistory = viewModel::refreshAssetHistory,
+                            onOpenBacktest = { sym ->
+                                viewModel.selectTradeSymbol(sym)
+                                selectedTradeWorkspace = TradeSubWorkspace.BACKTEST
+                                navigateToTab(TradeRoute)
+                            }
                         )
                     }
                     composable<TradeRoute> {
@@ -464,6 +493,8 @@ fun LgDigitalAppShell(
                             state = tradeState,
                             vaultState = vaultState,
                             isWide = isWide,
+                            activeWorkspace = selectedTradeWorkspace,
+                            onSelectWorkspace = { selectedTradeWorkspace = it },
                             onSelectSymbol = viewModel::selectTradeSymbol,
                             onSelectTimeframe = viewModel::selectTimeframe,
                             onSelectOverlay = viewModel::selectOverlay,
@@ -471,7 +502,8 @@ fun LgDigitalAppShell(
                             onSubmitPaperOrder = viewModel::submitPaperOrder,
                             onToggleAutopilot = viewModel::toggleAutopilot,
                             onUpdateRiskConfig = viewModel::updateRiskConfig,
-                            onRunAutopilotTick = viewModel::runAutopilotTick
+                            onRunAutopilotTick = viewModel::runAutopilotTick,
+                            onUpdateIndicatorBacktestConfig = viewModel::updateIndicatorBacktestConfig
                         )
                     }
                     composable<AdvisorRoute> {

@@ -19,6 +19,8 @@ import com.example.domain.models.ArbitrageOpportunity
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.HistoryWindow
+import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.MarketBreadth
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.RiskProfile
@@ -70,6 +72,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         observeVaultStreams()
         refreshMarkets()
         refreshNews()
+        loadAssetHistory("BTC", HistoryWindow.H24)
         loadTradeContext("BTC", ChartTimeframe.H1, StrategyType.TREND_CROSS)
         scanArbitrage()
         searchDexPairs("SOL")
@@ -106,14 +109,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val account = core.account ?: com.example.data.local.PaperAccountEntity()
                 val (triggers, payoutRule) = alertsPair
 
-                val priceMap = (marketArb.markets.tickersState as? UiState.Success)?.data
-                    ?.associate { it.symbol to it.priceUsd } ?: emptyMap()
+                val tickerMap = (marketArb.markets.tickersState as? UiState.Success)?.data
+                    ?.associateBy { it.symbol } ?: emptyMap()
 
-                val holdingsValue = core.holdings.sumOf { h ->
-                    val px = priceMap[h.symbol] ?: h.avgEntryPrice
-                    h.quantity * px
+                val nowMs = System.currentTimeMillis()
+                val cutoff24hMs = nowMs - 86_400_000L
+
+                var holdingsValue = 0.0
+                var unrealizedPnl = 0.0
+                var holdingsDailyDelta = 0.0
+
+                core.holdings.forEach { h ->
+                    val ticker = tickerMap[h.symbol]
+                    val px = ticker?.priceUsd ?: h.avgEntryPrice
+                    holdingsValue += h.quantity * px
+                    unrealizedPnl += h.quantity * (px - h.avgEntryPrice)
+
+                    holdingsDailyDelta += if (h.updatedAtMs < cutoff24hMs && ticker != null) {
+                        val factor = 1.0 + (ticker.change24hPct / 100.0)
+                        val px24hAgo = if (factor > 0.05) px / factor else px
+                        h.quantity * (px - px24hAgo)
+                    } else {
+                        h.quantity * (px - h.avgEntryPrice)
+                    }
                 }
+
+                val realizedTrades24h = core.tradeLog
+                    .filter { it.timestampMs >= cutoff24hMs && it.side.equals("SELL", ignoreCase = true) }
+                    .sumOf { it.pnlUsd }
+                val realizedArb24h = marketArb.arbTrades
+                    .filter { it.timestampMs >= cutoff24hMs }
+                    .sumOf { it.worstCaseNetUsd }
+                val realizedToday = realizedTrades24h + realizedArb24h
+
+                val dailyPnlUsd = holdingsDailyDelta + realizedToday
                 val totalEq = account.usdBalance + holdingsValue
+                val priorBase = (totalEq - holdingsDailyDelta - realizedTrades24h).coerceAtLeast(1.0)
+                val dailyPnlPct = (dailyPnlUsd / priorBase) * 100.0
+                val totalReturnUsd = totalEq - 10_000.0
+
                 val peak = max(account.peakEquityUsd, totalEq)
                 val ddPct = if (peak > 0.0) ((peak - totalEq) / peak) * 100.0 else 0.0
 
@@ -129,6 +163,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     priceTriggers = triggers,
                     payoutRule = payoutRule,
                     totalPortfolioEquityUsd = totalEq,
+                    holdingsValueUsd = holdingsValue,
+                    dailyPnlUsd = dailyPnlUsd,
+                    dailyPnlPct = dailyPnlPct,
+                    unrealizedPnlUsd = unrealizedPnl,
+                    realizedTodayPnlUsd = realizedToday,
+                    totalReturnUsd = totalReturnUsd,
                     currentDrawdownPct = ddPct
                 )
             }.collect { newState ->
@@ -204,6 +244,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _marketsState.update { it.copy(searchQuery = query) }
     }
 
+    fun selectHistoryAsset(symbol: String) {
+        loadAssetHistory(symbol, _marketsState.value.historyWindow)
+    }
+
+    fun selectHistoryWindow(window: HistoryWindow) {
+        loadAssetHistory(_marketsState.value.selectedHistorySymbol, window)
+    }
+
+    fun refreshAssetHistory() {
+        val current = _marketsState.value
+        loadAssetHistory(current.selectedHistorySymbol, current.historyWindow)
+    }
+
+    private fun loadAssetHistory(symbol: String, window: HistoryWindow) {
+        _marketsState.update {
+            it.copy(
+                selectedHistorySymbol = symbol,
+                historyWindow = window,
+                historyState = UiState.Loading
+            )
+        }
+        viewModelScope.launch {
+            apiClient.fetchAssetHistory(symbol, window)
+                .onSuccess { pts ->
+                    if (_marketsState.value.selectedHistorySymbol == symbol &&
+                        _marketsState.value.historyWindow == window
+                    ) {
+                        _marketsState.update { it.copy(historyState = UiState.Success(pts)) }
+                    }
+                }
+                .onFailure { err ->
+                    if (_marketsState.value.selectedHistorySymbol == symbol &&
+                        _marketsState.value.historyWindow == window
+                    ) {
+                        _marketsState.update {
+                            it.copy(historyState = UiState.Error(err.localizedMessage ?: "Historical feed unavailable"))
+                        }
+                    }
+                }
+        }
+    }
+
     fun refreshNews() {
         viewModelScope.launch {
             _marketsState.update { it.copy(newsState = UiState.Loading) }
@@ -277,7 +359,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             feeBps = state.feeBps,
             slippageBps = state.slippageBps
         )
-        _tradeState.update { it.copy(liveSignal = signal, backtestResult = backtest) }
+        val indicatorBacktest = TechnicalEngine.simulateIndicatorBacktest(
+            symbol = state.symbol,
+            candles = cachedCandles,
+            timeframe = state.timeframe,
+            config = state.indicatorBacktestConfig
+        )
+        _tradeState.update {
+            it.copy(
+                liveSignal = signal,
+                backtestResult = backtest,
+                indicatorBacktestResult = indicatorBacktest
+            )
+        }
+    }
+
+    fun updateIndicatorBacktestConfig(config: IndicatorBacktestConfig) {
+        _tradeState.update { it.copy(indicatorBacktestConfig = config) }
+        val state = _tradeState.value
+        if (cachedCandles.isNotEmpty()) {
+            val indicatorBacktest = TechnicalEngine.simulateIndicatorBacktest(
+                symbol = state.symbol,
+                candles = cachedCandles,
+                timeframe = state.timeframe,
+                config = config
+            )
+            _tradeState.update { it.copy(indicatorBacktestResult = indicatorBacktest) }
+        }
     }
 
     fun submitPaperOrder(isBuy: Boolean, notionalUsd: Double) {

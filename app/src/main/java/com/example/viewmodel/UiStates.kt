@@ -19,10 +19,14 @@ import com.example.domain.models.Candle
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
 import com.example.domain.models.DexPairInfo
+import com.example.domain.models.HistoryWindow
+import com.example.domain.models.IndicatorBacktestConfig
+import com.example.domain.models.IndicatorBacktestResult
 import com.example.domain.models.MarketBreadth
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.MiningQuote
 import com.example.domain.models.NewsItem
+import com.example.domain.models.PriceHistoryPoint
 import com.example.domain.models.ResearchProjection
 import com.example.domain.models.StrategySignal
 import com.example.domain.models.StrategyType
@@ -34,7 +38,10 @@ data class MarketsUiState(
     val breadth: MarketBreadth? = null,
     val newsState: UiState<List<NewsItem>> = UiState.Loading,
     val searchQuery: String = "",
-    val lastUpdatedMs: Long = 0L
+    val lastUpdatedMs: Long = 0L,
+    val selectedHistorySymbol: String = "BTC",
+    val historyWindow: HistoryWindow = HistoryWindow.H24,
+    val historyState: UiState<List<PriceHistoryPoint>> = UiState.Loading
 )
 
 data class TradeUiState(
@@ -45,6 +52,8 @@ data class TradeUiState(
     val candlesState: UiState<List<Candle>> = UiState.Loading,
     val liveSignal: StrategySignal? = null,
     val backtestResult: BacktestResult? = null,
+    val indicatorBacktestConfig: IndicatorBacktestConfig = IndicatorBacktestConfig(),
+    val indicatorBacktestResult: IndicatorBacktestResult? = null,
     val feeBps: Double = 10.0,
     val slippageBps: Double = 5.0,
     val statusBanner: String? = null
@@ -86,6 +95,12 @@ data class VaultUiState(
     val priceTriggers: List<PriceTriggerEntity> = emptyList(),
     val payoutRule: PayoutRuleEntity = PayoutRuleEntity(),
     val totalPortfolioEquityUsd: Double = 10000.0,
+    val holdingsValueUsd: Double = 0.0,
+    val dailyPnlUsd: Double = 0.0,
+    val dailyPnlPct: Double = 0.0,
+    val unrealizedPnlUsd: Double = 0.0,
+    val realizedTodayPnlUsd: Double = 0.0,
+    val totalReturnUsd: Double = 0.0,
     val currentDrawdownPct: Double = 0.0
 )
 

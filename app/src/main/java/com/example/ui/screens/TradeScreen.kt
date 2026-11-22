@@ -52,6 +52,7 @@ import com.example.core.CoinAssets
 import com.example.core.Formatters
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
@@ -61,6 +62,7 @@ import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.EquitySparklineChart
 import com.example.ui.components.GlassPanelCard
 import com.example.ui.components.GoldMetallicButton
+import com.example.ui.components.IndicatorBacktesterView
 import com.example.ui.components.MetricTile
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SignalBadge
@@ -69,10 +71,10 @@ import com.example.ui.theme.LgColors
 import com.example.viewmodel.TradeUiState
 import com.example.viewmodel.VaultUiState
 
-private enum class TradeSubWorkspace(val label: String) {
+enum class TradeSubWorkspace(val label: String) {
     ORDER("Paper Ticket"),
-    STRATEGIES("11 Strategies"),
-    BACKTEST("70/30 Backtest")
+    BACKTEST("Backtest Lab"),
+    STRATEGIES("11 Strategies")
 }
 
 @Composable
@@ -80,6 +82,8 @@ fun TradeScreen(
     state: TradeUiState,
     vaultState: VaultUiState,
     isWide: Boolean = false,
+    activeWorkspace: TradeSubWorkspace = TradeSubWorkspace.ORDER,
+    onSelectWorkspace: ((TradeSubWorkspace) -> Unit)? = null,
     onSelectSymbol: (String) -> Unit,
     onSelectTimeframe: (ChartTimeframe) -> Unit,
     onSelectOverlay: (ChartOverlay) -> Unit,
@@ -87,9 +91,14 @@ fun TradeScreen(
     onSubmitPaperOrder: (Boolean, Double) -> Unit,
     onToggleAutopilot: (Boolean) -> Unit,
     onUpdateRiskConfig: (RiskProfile, String, Double, Boolean) -> Unit,
-    onRunAutopilotTick: () -> Unit
+    onRunAutopilotTick: () -> Unit,
+    onUpdateIndicatorBacktestConfig: (IndicatorBacktestConfig) -> Unit = {}
 ) {
-    var activeSubPanel by remember { mutableStateOf(TradeSubWorkspace.ORDER) }
+    var localSubPanel by remember { mutableStateOf(activeWorkspace) }
+    val activeSubPanel = if (onSelectWorkspace != null) activeWorkspace else localSubPanel
+    fun chooseSubPanel(target: TradeSubWorkspace) {
+        if (onSelectWorkspace != null) onSelectWorkspace(target) else localSubPanel = target
+    }
     var orderAmountText by remember { mutableStateOf("250") }
     var scheduleText by remember(vaultState.account.stopSchedule) { mutableStateOf(vaultState.account.stopSchedule) }
     var stopScheduleEnabled by remember(vaultState.account.stopSchedule) {
@@ -242,7 +251,7 @@ fun TradeScreen(
             }
         }
 
-        // Desk Sub-Tabs: Paper Ticket | 11 Strategies | 70/30 Backtest
+        // Desk Sub-Tabs: Paper Ticket | Backtest Lab | 11 Strategies
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -251,13 +260,15 @@ fun TradeScreen(
                 TradeSubWorkspace.entries.forEach { panel ->
                     FilterChip(
                         selected = panel == activeSubPanel,
-                        onClick = { activeSubPanel = panel },
+                        onClick = { chooseSubPanel(panel) },
                         label = { Text(panel.label, maxLines = 1) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LgColors.Gold.copy(alpha = 0.2f),
                             selectedLabelColor = LgColors.Gold
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("trade_subtab_${panel.name.lowercase()}")
                     )
                 }
             }
@@ -363,9 +374,19 @@ fun TradeScreen(
             }
 
             TradeSubWorkspace.BACKTEST -> {
+                item {
+                    IndicatorBacktesterView(
+                        symbol = state.symbol,
+                        timeframe = state.timeframe,
+                        config = state.indicatorBacktestConfig,
+                        result = state.indicatorBacktestResult,
+                        onSelectTimeframe = onSelectTimeframe,
+                        onUpdateConfig = onUpdateIndicatorBacktestConfig
+                    )
+                }
                 state.backtestResult?.let { bt ->
                     item {
-                        CyberFrameCard(title = "CHRONOLOGICAL 70/30 BACKTEST") {
+                        CyberFrameCard(title = "ACTIVE STRATEGY 70/30 SPLIT") {
                             Text(
                                 text = "${bt.strategy.title} · Fee ${bt.feeBps.toInt()} bps + Slip ${bt.slippageBps.toInt()} bps",
                                 style = MaterialTheme.typography.bodyMedium,

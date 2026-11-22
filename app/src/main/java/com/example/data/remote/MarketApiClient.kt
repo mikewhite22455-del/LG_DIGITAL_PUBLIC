@@ -5,11 +5,13 @@ import com.example.core.CoinAssets
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartTimeframe
 import com.example.domain.models.DexPairInfo
+import com.example.domain.models.HistoryWindow
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.MiningQuote
 import com.example.domain.models.NewsItem
 import com.example.domain.models.OrderBookLevel
 import com.example.domain.models.OrderBookSnapshot
+import com.example.domain.models.PriceHistoryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -58,7 +60,7 @@ class MarketApiClient {
 
     private fun fetchFromCoinGecko(): List<MarketTicker> {
         val ids = CoinAssets.catalog.joinToString(",") { it.coingeckoId }
-        val url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=$ids&order=market_cap_desc&per_page=25&page=1&sparkline=false&price_change_percentage=24h"
+        val url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=$ids&order=market_cap_desc&per_page=25&page=1&sparkline=true&price_change_percentage=24h"
         val body = fetchString(url)
         val arr = JSONArray(body)
         if (arr.length() == 0) throw IllegalStateException("CoinGecko returned 0 markets")
@@ -67,6 +69,16 @@ class MarketApiClient {
             val obj = arr.getJSONObject(i)
             val sym = obj.optString("symbol").uppercase()
             val entry = CoinAssets.find(sym)
+            val sparkArr = obj.optJSONObject("sparkline_in_7d")?.optJSONArray("price")
+            val hourly = if (sparkArr != null && sparkArr.length() > 0) {
+                val startIdx = maxOf(0, sparkArr.length() - 24)
+                (startIdx until sparkArr.length()).mapNotNull { idx ->
+                    val v = sparkArr.optDouble(idx, Double.NaN)
+                    if (v.isFinite() && v > 0.0) v else null
+                }
+            } else {
+                emptyList()
+            }
             list += MarketTicker(
                 symbol = sym,
                 name = entry?.name ?: obj.optString("name", sym),
@@ -76,23 +88,24 @@ class MarketApiClient {
                 marketCapUsd = obj.optDouble("market_cap", 0.0),
                 high24h = obj.optDouble("high_24h", 0.0),
                 low24h = obj.optDouble("low_24h", 0.0),
-                source = "CoinGecko"
+                source = "CoinGecko",
+                hourlyPrices = hourly
             )
         }
         return list.sortedByDescending { it.marketCapUsd }
     }
 
-    private fun fetchFromKuCoin(): List<MarketTicker> {
+    private suspend fun fetchFromKuCoin(): List<MarketTicker> = coroutineScope {
         val body = fetchString("https://api.kucoin.com/api/v1/market/allTickers")
         val root = JSONObject(body)
         val tickerArr = root.getJSONObject("data").getJSONArray("ticker")
         val targetMap = CoinAssets.catalog.associateBy { "${it.symbol}-USDT" }
-        val list = mutableListOf<MarketTicker>()
+        val baseList = mutableListOf<MarketTicker>()
         for (i in 0 until tickerArr.length()) {
             val obj = tickerArr.getJSONObject(i)
             val pair = obj.optString("symbol")
             val entry = targetMap[pair] ?: continue
-            list += MarketTicker(
+            baseList += MarketTicker(
                 symbol = entry.symbol,
                 name = entry.name,
                 priceUsd = obj.optString("last", "0").toDoubleOrNull() ?: 0.0,
@@ -104,8 +117,17 @@ class MarketApiClient {
                 source = "KuCoin"
             )
         }
-        if (list.isEmpty()) throw IllegalStateException("KuCoin returned no matching USDT tickers")
-        return list
+        if (baseList.isEmpty()) throw IllegalStateException("KuCoin returned no matching USDT tickers")
+        baseList.map { ticker ->
+            async(Dispatchers.IO) {
+                val hourly = runCatching {
+                    fetchKuCoinCandles(ticker.symbol, ChartTimeframe.H1)
+                        .takeLast(24)
+                        .map { it.close }
+                }.getOrDefault(emptyList())
+                ticker.copy(hourlyPrices = hourly)
+            }
+        }.awaitAll()
     }
 
     suspend fun fetchCandles(
@@ -174,6 +196,95 @@ class MarketApiClient {
         }
         if (out.isEmpty()) throw IllegalStateException("Empty KuCoin candles")
         return out.sortedBy { it.timestampSec }
+    }
+
+    suspend fun fetchAssetHistory(
+        symbol: String,
+        window: HistoryWindow
+    ): Result<List<PriceHistoryPoint>> = withContext(Dispatchers.IO) {
+        runCatching {
+            try {
+                val arr = fetchKrakenCandlesInterval(symbol, window.krakenInterval, window.candleCount)
+                arr.map { PriceHistoryPoint(it.timestampSec, it.close) }
+            } catch (_: Exception) {
+                try {
+                    val ku = fetchKuCoinCandlesType(symbol, window.kuType, window.candleCount)
+                    ku.map { PriceHistoryPoint(it.timestampSec, it.close) }
+                } catch (_: Exception) {
+                    fetchCoinGeckoMarketChart(symbol, window)
+                }
+            }
+        }
+    }
+
+    private fun fetchKrakenCandlesInterval(symbol: String, interval: Int, maxBars: Int): List<Candle> {
+        val pair = CoinAssets.find(symbol)?.krakenPair ?: "${symbol.uppercase()}USD"
+        val url = "https://api.kraken.com/0/public/OHLC?pair=$pair&interval=$interval"
+        val root = JSONObject(fetchString(url))
+        val errs = root.optJSONArray("error")
+        if (errs != null && errs.length() > 0) {
+            throw IllegalStateException("Kraken OHLC: ${errs.getString(0)}")
+        }
+        val resultObj = root.getJSONObject("result")
+        val dataKey = resultObj.keys().asSequence().firstOrNull { it != "last" }
+            ?: throw IllegalStateException("Missing Kraken series key")
+        val arr = resultObj.getJSONArray(dataKey)
+        val out = mutableListOf<Candle>()
+        val start = maxOf(0, arr.length() - maxBars)
+        for (i in start until arr.length()) {
+            val row = arr.getJSONArray(i)
+            out += Candle(
+                timestampSec = row.getLong(0),
+                open = row.getString(1).toDouble(),
+                high = row.getString(2).toDouble(),
+                low = row.getString(3).toDouble(),
+                close = row.getString(4).toDouble(),
+                volume = row.getString(6).toDouble()
+            )
+        }
+        if (out.isEmpty()) throw IllegalStateException("Empty Kraken history")
+        return out
+    }
+
+    private fun fetchKuCoinCandlesType(symbol: String, kuType: String, maxBars: Int): List<Candle> {
+        val url = "https://api.kucoin.com/api/v1/market/candles?type=$kuType&symbol=${symbol.uppercase()}-USDT"
+        val root = JSONObject(fetchString(url))
+        val arr = root.getJSONArray("data")
+        val out = mutableListOf<Candle>()
+        for (i in 0 until minOf(maxBars, arr.length())) {
+            val row = arr.getJSONArray(i)
+            out += Candle(
+                timestampSec = row.getString(0).toLong(),
+                open = row.getString(1).toDouble(),
+                close = row.getString(2).toDouble(),
+                high = row.getString(3).toDouble(),
+                low = row.getString(4).toDouble(),
+                volume = row.getString(5).toDouble()
+            )
+        }
+        if (out.isEmpty()) throw IllegalStateException("Empty KuCoin history")
+        return out.sortedBy { it.timestampSec }
+    }
+
+    private fun fetchCoinGeckoMarketChart(symbol: String, window: HistoryWindow): List<PriceHistoryPoint> {
+        val cgId = CoinAssets.find(symbol)?.coingeckoId ?: symbol.lowercase()
+        val url = "https://api.coingecko.com/api/v3/coins/$cgId/market_chart?vs_currency=usd&days=${window.cgDays}"
+        val root = JSONObject(fetchString(url))
+        val arr = root.getJSONArray("prices")
+        val all = mutableListOf<PriceHistoryPoint>()
+        for (i in 0 until arr.length()) {
+            val row = arr.getJSONArray(i)
+            val tsSec = row.getLong(0) / 1000L
+            val price = row.getDouble(1)
+            if (price.isFinite() && price > 0.0) {
+                all += PriceHistoryPoint(tsSec, price)
+            }
+        }
+        if (all.isEmpty()) throw IllegalStateException("Empty CoinGecko history")
+        val latestTs = all.last().timestampSec
+        val cutoff = latestTs - window.lookbackSec
+        val sliced = all.filter { it.timestampSec >= cutoff }
+        return if (sliced.size >= 2) sliced else all.takeLast(minOf(window.candleCount, all.size))
     }
 
     suspend fun fetchPublicOrderBooks(symbol: String): List<OrderBookSnapshot> = coroutineScope {

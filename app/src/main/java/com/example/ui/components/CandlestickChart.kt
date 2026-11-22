@@ -326,3 +326,94 @@ fun EquitySparklineChart(
         }
     }
 }
+
+@Composable
+fun HourlyTrendSparkline(
+    prices: List<Double>,
+    positive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val strokeColor = if (positive) LgColors.Turquoise else LgColors.Crimson
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        if (prices.size < 2) {
+            drawLine(
+                color = LgColors.BorderHairline,
+                start = Offset(0f, h * 0.5f),
+                end = Offset(w, h * 0.5f),
+                strokeWidth = 2f,
+                cap = StrokeCap.Round
+            )
+            return@Canvas
+        }
+
+        val minV = prices.minOrNull() ?: 0.0
+        val maxV = prices.maxOrNull() ?: 1.0
+        val span = max(maxV - minV, maxV * 1e-6)
+        val padY = h * 0.12f
+        val usableH = (h - padY * 2f).coerceAtLeast(1f)
+        val step = w / max(prices.size - 1, 1)
+
+        fun pointAt(idx: Int): Offset {
+            val x = idx * step
+            val norm = ((prices[idx] - minV) / span).toFloat().coerceIn(0f, 1f)
+            val y = padY + usableH * (1f - norm)
+            return Offset(x, y)
+        }
+
+        val points = prices.indices.map { pointAt(it) }
+
+        // Subtle baseline reference at 24h-ago opening price
+        val startY = points.first().y
+        drawLine(
+            color = LgColors.BorderHairline.copy(alpha = 0.55f),
+            start = Offset(0f, startY),
+            end = Offset(w, startY),
+            strokeWidth = 1.2f
+        )
+
+        val linePath = Path().apply {
+            moveTo(points.first().x, points.first().y)
+            for (i in 1 until points.size) {
+                val p0 = points[i - 1]
+                val p1 = points[i]
+                val cx = (p0.x + p1.x) * 0.5f
+                cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+            }
+        }
+
+        val fillPath = Path().apply {
+            addPath(linePath)
+            lineTo(points.last().x, h)
+            lineTo(points.first().x, h)
+            close()
+        }
+
+        drawPath(
+            path = fillPath,
+            brush = Brush.verticalGradient(
+                listOf(strokeColor.copy(alpha = 0.30f), Color.Transparent)
+            )
+        )
+        drawPath(
+            path = linePath,
+            color = strokeColor,
+            style = Stroke(width = 3.2f, cap = StrokeCap.Round)
+        )
+
+        val endPt = points.last()
+        drawCircle(
+            color = strokeColor.copy(alpha = 0.35f),
+            radius = 6f,
+            center = endPt
+        )
+        drawCircle(
+            color = strokeColor,
+            radius = 3.2f,
+            center = endPt
+        )
+    }
+}

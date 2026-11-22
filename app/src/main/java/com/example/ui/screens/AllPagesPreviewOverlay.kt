@@ -75,6 +75,8 @@ import com.example.domain.models.ArbitrageMode
 import com.example.domain.models.ArbitrageOpportunity
 import com.example.domain.models.ChartOverlay
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.HistoryWindow
+import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
@@ -222,7 +224,11 @@ fun AllPagesPreviewOverlay(
     onResetPortfolio: () -> Unit,
     onRemoveWatchlist: (String) -> Unit,
     onAddWatchWallet: (String, String, String) -> Unit,
-    onRemoveWatchWallet: (Long) -> Unit
+    onRemoveWatchWallet: (Long) -> Unit,
+    onSelectHistoryAsset: (String) -> Unit = {},
+    onSelectHistoryWindow: (HistoryWindow) -> Unit = {},
+    onRefreshHistory: () -> Unit = {},
+    onUpdateIndicatorBacktestConfig: (IndicatorBacktestConfig) -> Unit = {}
 ) {
     var showGridOverview by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { previewPages.size })
@@ -416,13 +422,21 @@ fun AllPagesPreviewOverlay(
                             val page = previewPages[pageIndex]
                             Box(modifier = Modifier.fillMaxSize()) {
                                 when (page.id) {
-                                    PreviewDestination.HOME -> MarketsScreen(
-                                        state = marketsState,
+                                    PreviewDestination.HOME -> DashboardScreen(
+                                        marketsState = marketsState,
+                                        arbitrageState = arbitrageState,
                                         vaultState = vaultState,
                                         isWide = isWide,
-                                        onRefreshMarkets = onRefreshMarkets,
+                                        onRefreshAll = {
+                                            onRefreshMarkets()
+                                            onScanArbitrage()
+                                        },
                                         onRefreshNews = onRefreshNews,
                                         onSearchChange = onSearchChange,
+                                        onToggleArbMode = { mode -> onUpdateArbParams(null, mode, null, null, null) },
+                                        onScanArbitrage = onScanArbitrage,
+                                        onExecuteOpportunity = onExecuteOpportunity,
+                                        onOpenArbitrageDesk = { scope.launch { pagerState.animateScrollToPage(3) } },
                                         onSelectCoinForTrade = { sym ->
                                             onSelectCoinForTrade(sym)
                                             onJumpToDestination(PreviewDestination.TRADE)
@@ -438,7 +452,14 @@ fun AllPagesPreviewOverlay(
                                         onNavigateToAdvisor = { scope.launch { pagerState.animateScrollToPage(2) } },
                                         onNavigateToMining = { scope.launch { pagerState.animateScrollToPage(6) } },
                                         onNavigateToTrade = { scope.launch { pagerState.animateScrollToPage(1) } },
-                                        onOpenAllPagesPreview = { showGridOverview = true }
+                                        onOpenAllPagesPreview = { showGridOverview = true },
+                                        onSelectHistoryAsset = onSelectHistoryAsset,
+                                        onSelectHistoryWindow = onSelectHistoryWindow,
+                                        onRefreshHistory = onRefreshHistory,
+                                        onOpenBacktest = { sym ->
+                                            onSelectCoinForTrade(sym)
+                                            scope.launch { pagerState.animateScrollToPage(1) }
+                                        }
                                     )
                                     PreviewDestination.TRADE -> TradeScreen(
                                         state = tradeState,
@@ -451,7 +472,8 @@ fun AllPagesPreviewOverlay(
                                         onSubmitPaperOrder = onSubmitPaperOrder,
                                         onToggleAutopilot = onToggleAutopilot,
                                         onUpdateRiskConfig = onUpdateRiskConfig,
-                                        onRunAutopilotTick = onRunAutopilotTick
+                                        onRunAutopilotTick = onRunAutopilotTick,
+                                        onUpdateIndicatorBacktestConfig = onUpdateIndicatorBacktestConfig
                                     )
                                     PreviewDestination.ADVISOR -> AdvisorScreen(
                                         advisorState = advisorState,

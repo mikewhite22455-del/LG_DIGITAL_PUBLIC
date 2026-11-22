@@ -5,10 +5,16 @@ import com.example.domain.models.BacktestTrade
 import com.example.domain.models.BreakoutCandidate
 import com.example.domain.models.Candle
 import com.example.domain.models.ChartTimeframe
+import com.example.domain.models.ConfluenceRule
+import com.example.domain.models.EquityCurvePoint
+import com.example.domain.models.IndicatorBacktestConfig
+import com.example.domain.models.IndicatorBacktestResult
 import com.example.domain.models.ResearchProjection
 import com.example.domain.models.SignalAction
+import com.example.domain.models.SimulatedSignalMarker
 import com.example.domain.models.StrategySignal
 import com.example.domain.models.StrategyType
+import com.example.domain.models.TechnicalIndicatorType
 import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.max
@@ -471,6 +477,246 @@ object TechnicalEngine {
             slippageBps = slippageBps,
             equityCurve = curve,
             recentTrades = trades.takeLast(12).reversed()
+        )
+    }
+
+    fun simulateIndicatorBacktest(
+        symbol: String,
+        candles: List<Candle>,
+        timeframe: ChartTimeframe,
+        config: IndicatorBacktestConfig
+    ): IndicatorBacktestResult {
+        val initialCap = config.initialCapitalUsd.coerceAtLeast(100.0)
+        val activeIndicators = config.selectedIndicators
+        if (candles.size < 32 || activeIndicators.isEmpty()) {
+            return IndicatorBacktestResult(
+                symbol = symbol,
+                timeframe = timeframe,
+                config = config,
+                initialCapitalUsd = initialCap,
+                finalEquityUsd = initialCap,
+                totalReturnPct = 0.0,
+                buyHoldReturnPct = 0.0,
+                alphaPct = 0.0,
+                winRatePct = 0.0,
+                maxDrawdownPct = 0.0,
+                profitFactor = 0.0,
+                totalTrades = 0,
+                winningTrades = 0,
+                equityPoints = emptyList(),
+                markers = emptyList(),
+                closedTrades = emptyList()
+            )
+        }
+
+        val closes = candles.map { it.close }
+        val rsi = rsiSeries(closes, config.rsiPeriod.coerceIn(4, 50))
+        val emaFast = emaSeries(closes, config.macdFast.coerceIn(3, 30))
+        val emaSlow = emaSeries(closes, config.macdSlow.coerceIn(10, 60))
+        val macdLine = closes.indices.map { i ->
+            val f = emaFast[i]
+            val s = emaSlow[i]
+            if (f != null && s != null) f - s else 0.0
+        }
+        val macdSig = emaSeries(macdLine, config.macdSignal.coerceIn(3, 25))
+        val bb = bollingerSeries(closes, config.bbPeriod.coerceIn(5, 50), config.bbStdDev.coerceIn(1.0, 3.5))
+
+        val warmup = maxOf(
+            config.rsiPeriod + 2,
+            config.macdSlow + config.macdSignal,
+            config.bbPeriod + 1,
+            26
+        ).coerceIn(10, max(10, candles.size - 8))
+
+        val oneWayCost = ((config.feeBps + config.slippageBps).coerceAtLeast(0.0)) / 10000.0
+        val startPrice = candles[warmup].close.coerceAtLeast(1e-9)
+
+        var cashEquity = initialCap
+        var inPosition = false
+        var entryPrice = 0.0
+        var investedCapitalBase = 0.0
+        var peakEquity = initialCap
+        var maxDrawdownPct = 0.0
+        var wins = 0
+        var tradesCount = 0
+        var grossProfit = 0.0
+        var grossLoss = 0.0
+
+        val equityPoints = mutableListOf<EquityCurvePoint>()
+        val markers = mutableListOf<SimulatedSignalMarker>()
+        val closedTrades = mutableListOf<SimulatedSignalMarker>()
+
+        for (i in warmup until candles.size) {
+            val c = candles[i]
+            val close = c.close.coerceAtLeast(1e-9)
+            val pointIdx = i - warmup
+
+            val rsiVal = rsi[i]
+            val mNow = macdLine[i]
+            val sNow = macdSig[i] ?: mNow
+            val mPrev = macdLine[i - 1]
+            val sPrev = macdSig[i - 1] ?: mPrev
+            val macdHist = mNow - sNow
+            val band = bb[i]
+
+            val rsiAction = if (TechnicalIndicatorType.RSI in activeIndicators && rsiVal != null) {
+                when {
+                    rsiVal <= config.rsiOversold -> SignalAction.BUY
+                    rsiVal >= config.rsiOverbought -> SignalAction.SELL
+                    else -> SignalAction.HOLD
+                }
+            } else SignalAction.HOLD
+
+            val macdAction = if (TechnicalIndicatorType.MACD in activeIndicators) {
+                val useStateMode = activeIndicators.size > 1 && config.confluenceRule == ConfluenceRule.ALL
+                when {
+                    useStateMode && mNow > sNow -> SignalAction.BUY
+                    useStateMode && mNow < sNow -> SignalAction.SELL
+                    !useStateMode && mPrev <= sPrev && mNow > sNow -> SignalAction.BUY
+                    !useStateMode && mPrev >= sPrev && mNow < sNow -> SignalAction.SELL
+                    else -> SignalAction.HOLD
+                }
+            } else SignalAction.HOLD
+
+            val bbAction = if (TechnicalIndicatorType.BOLLINGER in activeIndicators && band.lower != null && band.upper != null) {
+                when {
+                    close <= band.lower -> SignalAction.BUY
+                    close >= band.upper -> SignalAction.SELL
+                    else -> SignalAction.HOLD
+                }
+            } else SignalAction.HOLD
+
+            val voteMap = buildList {
+                if (TechnicalIndicatorType.RSI in activeIndicators) add(TechnicalIndicatorType.RSI to rsiAction)
+                if (TechnicalIndicatorType.MACD in activeIndicators) add(TechnicalIndicatorType.MACD to macdAction)
+                if (TechnicalIndicatorType.BOLLINGER in activeIndicators) add(TechnicalIndicatorType.BOLLINGER to bbAction)
+            }
+
+            val buyVotes = voteMap.count { it.second == SignalAction.BUY }
+            val sellVotes = voteMap.count { it.second == SignalAction.SELL }
+
+            val combinedAction = when (config.confluenceRule) {
+                ConfluenceRule.ANY -> when {
+                    buyVotes > 0 && sellVotes == 0 -> SignalAction.BUY
+                    sellVotes > 0 && buyVotes == 0 -> SignalAction.SELL
+                    else -> SignalAction.HOLD
+                }
+                ConfluenceRule.ALL -> when {
+                    buyVotes == voteMap.size -> SignalAction.BUY
+                    sellVotes == voteMap.size -> SignalAction.SELL
+                    else -> SignalAction.HOLD
+                }
+            }
+
+            fun buildTriggerReason(target: SignalAction): String {
+                val parts = mutableListOf<String>()
+                if (TechnicalIndicatorType.RSI in activeIndicators && rsiAction == target && rsiVal != null) {
+                    parts += "RSI ${"%.1f".format(rsiVal)}"
+                }
+                if (TechnicalIndicatorType.MACD in activeIndicators && macdAction == target) {
+                    parts += if (target == SignalAction.BUY) "MACD Bull (+${"%.2f".format(macdHist)})" else "MACD Bear (${"%.2f".format(macdHist)})"
+                }
+                if (TechnicalIndicatorType.BOLLINGER in activeIndicators && bbAction == target) {
+                    parts += if (target == SignalAction.BUY) "BB Lower Touch" else "BB Upper Touch"
+                }
+                return parts.joinToString(" + ").ifBlank { "End of Window Close" }
+            }
+
+            if (!inPosition && combinedAction == SignalAction.BUY && i < candles.lastIndex) {
+                inPosition = true
+                entryPrice = close
+                investedCapitalBase = cashEquity * (1.0 - oneWayCost)
+                markers += SimulatedSignalMarker(
+                    candleIndex = pointIdx,
+                    timestampSec = c.timestampSec,
+                    action = SignalAction.BUY,
+                    priceUsd = close,
+                    reason = buildTriggerReason(SignalAction.BUY)
+                )
+            } else if (inPosition && (combinedAction == SignalAction.SELL || i == candles.lastIndex)) {
+                val exitProceeds = investedCapitalBase * (close / entryPrice) * (1.0 - oneWayCost)
+                val pnlUsd = exitProceeds - cashEquity
+                val netRetPct = ((exitProceeds - cashEquity) / max(cashEquity, 1e-9)) * 100.0
+                cashEquity = exitProceeds
+                tradesCount++
+                if (pnlUsd > 0.0) {
+                    wins++
+                    grossProfit += pnlUsd
+                } else {
+                    grossLoss += abs(pnlUsd)
+                }
+                val reason = if (combinedAction == SignalAction.SELL) {
+                    buildTriggerReason(SignalAction.SELL)
+                } else {
+                    "End of Simulation Close"
+                }
+                val sellMarker = SimulatedSignalMarker(
+                    candleIndex = pointIdx,
+                    timestampSec = c.timestampSec,
+                    action = SignalAction.SELL,
+                    priceUsd = close,
+                    entryPriceUsd = entryPrice,
+                    returnPct = netRetPct,
+                    pnlUsd = pnlUsd,
+                    reason = reason
+                )
+                markers += sellMarker
+                closedTrades += sellMarker
+                inPosition = false
+            }
+
+            val markEquity = if (inPosition) {
+                investedCapitalBase * (close / entryPrice)
+            } else {
+                cashEquity
+            }
+            if (markEquity > peakEquity) peakEquity = markEquity
+            val dd = ((peakEquity - markEquity) / max(peakEquity, 1e-9)) * 100.0
+            if (dd > maxDrawdownPct) maxDrawdownPct = dd
+
+            val buyHoldEquity = initialCap * (close / startPrice)
+            equityPoints += EquityCurvePoint(
+                candleIndex = pointIdx,
+                timestampSec = c.timestampSec,
+                priceUsd = close,
+                strategyEquityUsd = markEquity,
+                buyHoldEquityUsd = buyHoldEquity,
+                rsiValue = rsiVal,
+                macdHistogram = macdHist,
+                bbUpper = band.upper,
+                bbMid = band.mid,
+                bbLower = band.lower
+            )
+        }
+
+        val finalEq = equityPoints.lastOrNull()?.strategyEquityUsd ?: cashEquity
+        val finalBuyHoldEq = equityPoints.lastOrNull()?.buyHoldEquityUsd ?: initialCap
+        val totalReturnPct = ((finalEq - initialCap) / initialCap) * 100.0
+        val buyHoldReturnPct = ((finalBuyHoldEq - initialCap) / initialCap) * 100.0
+        val winRatePct = if (tradesCount > 0) (wins.toDouble() / tradesCount) * 100.0 else 0.0
+        val profitFactor = when {
+            grossLoss > 1e-6 -> grossProfit / grossLoss
+            grossProfit > 0.0 -> 99.9
+            else -> 0.0
+        }
+
+        return IndicatorBacktestResult(
+            symbol = symbol,
+            timeframe = timeframe,
+            config = config,
+            initialCapitalUsd = initialCap,
+            finalEquityUsd = finalEq,
+            totalReturnPct = totalReturnPct,
+            buyHoldReturnPct = buyHoldReturnPct,
+            alphaPct = totalReturnPct - buyHoldReturnPct,
+            winRatePct = winRatePct,
+            maxDrawdownPct = maxDrawdownPct,
+            profitFactor = profitFactor,
+            totalTrades = tradesCount,
+            winningTrades = wins,
+            equityPoints = equityPoints,
+            markers = markers,
+            closedTrades = closedTrades.reversed()
         )
     }
 
