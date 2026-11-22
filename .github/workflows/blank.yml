@@ -12,10 +12,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Gradle
@@ -28,6 +28,10 @@ jobs:
           mkdir -p app
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
+      - name: Decode Release Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+
       - name: Build Debug APK
         run: gradle assembleDebug
 
@@ -36,9 +40,6 @@ jobs:
         with:
           name: LG-Digital-Debug-APK
           path: "**/build/outputs/apk/debug/app-debug.apk"
-
-      - name: Decode Release Keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
 
       - name: Build Signed Release AAB
         env:
