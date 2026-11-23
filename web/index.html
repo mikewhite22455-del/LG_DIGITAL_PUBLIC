@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090e16">
+  <title>LG Digital | Paper Trading</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">LG</span><span>LG DIGITAL<small>MARKET DESK</small></span></div>
+    <span class="badge">PAPER TRADING ONLY</span>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">YOUR DIGITAL MARKET DESK</p><h1>Trade the market.<br><em>Practice the strategy.</em></h1>
+      <p class="subtle">Live market prices, simulated orders, and a place to learn without risking real money.</p></div>
+      <div class="notice"><strong>Simulation only</strong><span>No real funds or exchange accounts are connected. Prices can change and simulated fills exclude fees and slippage.</span></div>
+    </section>
+    <section class="summary" aria-label="Paper account summary">
+      <div class="metric"><span>PORTFOLIO VALUE</span><strong id="portfolio">—</strong><small>Cash + current holdings</small></div>
+      <div class="metric"><span>PAPER CASH</span><strong id="cash">—</strong><small>Available to trade</small></div>
+      <div class="metric"><span>MARKET STATUS</span><strong id="status">Connecting</strong><small id="updated">Waiting for live prices</small></div>
+    </section>
+    <div class="layout">
+      <section class="panel markets">
+        <div class="panel-heading"><div><p class="eyebrow">THE MARKET</p><h2>Live prices</h2></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
+        <p id="market-error" class="error" role="status" hidden></p>
+        <div class="table-wrap"><table><thead><tr><th>ASSET</th><th>PRICE (USD)</th><th>24H</th><th>HOLDINGS</th></tr></thead><tbody id="market-list"><tr><td colspan="4">Loading prices…</td></tr></tbody></table></div>
+        <p class="footnote">Prices from CoinGecko. Availability and update frequency depend on the data provider.</p>
+      </section>
+      <section class="panel ticket">
+        <div class="panel-heading"><div><p class="eyebrow">SIMULATED ORDERS</p><h2>Paper trade</h2></div></div>
+        <form id="trade-form">
+          <label for="coin">Asset</label><select id="coin" required disabled><option>Waiting for prices</option></select>
+          <label for="side">Order type</label><select id="side"><option value="BUY">Buy</option><option value="SELL">Sell</option></select>
+          <label for="amount">Amount in USD</label><div class="input-wrap"><span>$</span><input id="amount" type="number" min="1" max="1000000" step="0.01" placeholder="100.00" required></div>
+          <button id="submit" class="primary" type="submit" disabled>Place paper order</button>
+          <p id="trade-message" role="status" aria-live="polite"></p>
+        </form>
+        <p class="footnote">Paper balances and order history are stored only in this browser. Clearing browser data removes them.</p>
+      </section>
+    </div>
+    <section class="panel history">
+      <div class="panel-heading"><div><p class="eyebrow">YOUR ACTIVITY</p><h2>Recent paper orders</h2></div><button id="reset" class="secondary" type="button">Reset account</button></div>
+      <div class="table-wrap"><table><thead><tr><th>TIME</th><th>ORDER</th><th>AMOUNT</th><th>PRICE</th></tr></thead><tbody id="orders"></tbody></table></div>
+    </section>
+    <footer>LG DIGITAL · PAPER TRADING ONLY <span>Not investment advice. Market data may be delayed.</span></footer>
+  </main>
+</body>
+</html>

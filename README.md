@@ -25,6 +25,14 @@ In the repository's **Settings → Secrets and variables → Actions**, create o
 
 Run **Build Android APK and Play Store AAB** from the repository's Actions tab. When the run succeeds, download the `LG-Digital-PlayStore-AAB` artifact and extract the `.aab` file from the ZIP. A missing or invalid signing secret fails the build rather than producing an unsigned bundle.
 
+## Browser paper-trading site
+
+The separate `web/` application provides live CoinGecko market prices and simulated paper trading; it is not the Android app and does not connect to exchanges or place real orders. Each browser stores its own paper account locally, so clearing browser data or switching devices loses that account. Simulated fills do not include fees or slippage.
+
+Run locally with Node.js 20 or newer using `cd web && npm start`, then visit `http://localhost:3000`. Run tests with `npm test` from the same directory. The server requires internet access to CoinGecko; if prices are unavailable, paper orders are paused.
+
+To deploy publicly on Render, connect this repository in the Render dashboard, choose **New → Blueprint**, select this repository and its `main` branch, and apply the included `render.yaml`. Render will provide the site's public URL. No exchange credentials or Android signing keys are required for the website.
+
 ## Features
 - **Live Markets**: CoinGecko & KuCoin spot tickers, market breadth pulse, top movers, searchable coin catalog with quick-action sheets, and CoinDesk RSS market news.
 - **Trade & Bots**: Interactive Compose `Canvas` OHLCV candlestick chart (`15m`, `1h`, `4h`, `1d`) with SMA, EMA, Bollinger Bands, and Supertrend overlays; 11 deterministic technical strategies; paper order ticket; chronological 70/30 backtester; and Adaptive Autopilot guardrails (risk profiles, stop-schedule windows, drawdown locks, higher-timeframe filter).
