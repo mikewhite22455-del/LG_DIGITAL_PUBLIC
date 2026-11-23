@@ -824,68 +824,6 @@ fun ExchangeConfigurationScreen(
                         }
                     }
 
-                    item {
-                        CyberFrameCard(title = "LG RENDER SERVER TOKEN (OPTIONAL)") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LgColors.InkSecondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                StatusPill(
-                                    text = if (credentials.hasLgServerToken) "ENCRYPTED" else "OPTIONAL",
-                                    color = if (credentials.hasLgServerToken) LgColors.Turquoise else LgColors.Gold
-                                )
-                            }
-                            SecretCredentialField(
-                                value = lgServerToken,
-                                onValueChange = { lgServerToken = it },
-                                label = "LG Render Bearer Token (optional)",
-                                testTag = "lg_server_token_input"
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                GoldMetallicButton(
-                                    text = "SAVE TOKEN",
-                                    onClick = { onSaveLgServerToken(lgServerToken) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("save_lg_server_token_button")
-                                )
-                                OutlinedButton(
-                                    onClick = { activeQrScannerTarget = QrExchangeTarget.LG_SERVER },
-                                    modifier = Modifier
-                                        .heightIn(min = 48.dp)
-                                        .testTag("scan_lg_server_token_qr_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.QrCodeScanner,
-                                        contentDescription = "Scan LG Render server token QR",
-                                        tint = LgColors.Turquoise,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        lgServerToken = ""
-                                        onClearExchange("lg_server")
-                                    },
-                                    modifier = Modifier
-                                        .heightIn(min = 48.dp)
-                                        .testTag("clear_lg_server_token_button")
-                                ) {
-                                    Text("Clear", color = LgColors.Gold)
-                                }
-                            }
-                        }
-                    }
-
                     // Wipe All Credentials Action
                     item {
                         OutlinedButton(
