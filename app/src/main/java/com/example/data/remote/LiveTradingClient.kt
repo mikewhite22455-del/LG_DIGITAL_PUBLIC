@@ -7,8 +7,6 @@ import com.example.domain.models.ConnectedExchange
 import com.example.domain.models.LiveConnectorStatus
 import com.example.domain.models.LiveExecutionRoute
 import com.example.domain.models.LiveOrderReceipt
-import com.example.domain.models.LiveServerHealth
-import com.example.domain.models.LiveServerTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,10 +24,11 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Live trading & server bridge for:
- *  - LG Private Render Server (https://lg-digital-private.onrender.com) — Kraken Pro + Coinbase linked
- *  - LG Owner Render Server   (https://lg-digital-owner.onrender.com)
- *  - Direct signed spot APIs  (Kraken Pro, Coinbase Advanced Trade, KuCoin, Bitstamp)
+ * Live trading bridge for direct signed spot APIs:
+ *  - Kraken Pro
+ *  - Coinbase Advanced Trade
+ *  - KuCoin
+ *  - Bitstamp
  *
  * Credential resolution priority:
  *  1) Local AndroidKeyStore AES-256-GCM Encrypted DataStore vault (Exchange Configuration screen)
@@ -63,7 +62,6 @@ class LiveTradingClient {
     }
 
     fun getConnectorStatuses(stored: EncryptedExchangeCredentials = EncryptedExchangeCredentials()): List<LiveConnectorStatus> {
-        val lgTokenReady = resolveSecret(stored.lgServerToken, BuildConfig.LG_LIVE_API_TOKEN).isNotBlank()
         val krakenReady = resolveSecret(stored.krakenApiKey, BuildConfig.KRAKEN_API_KEY).isNotBlank() &&
             resolveSecret(stored.krakenApiSecret, BuildConfig.KRAKEN_API_SECRET).isNotBlank()
         val coinbaseReady = resolveSecret(stored.coinbaseApiKey, BuildConfig.COINBASE_API_KEY).isNotBlank() &&
@@ -75,24 +73,6 @@ class LiveTradingClient {
             resolveSecret(stored.bitstampApiSecret, BuildConfig.BITSTAMP_API_SECRET).isNotBlank()
 
         return listOf(
-            LiveConnectorStatus(
-                route = LiveExecutionRoute.LG_PRIVATE_SERVER,
-                isConfigured = true,
-                detail = if (lgTokenReady) {
-                    "Ready · Encrypted Bearer token active · Kraken Pro & Coinbase linked on Render"
-                } else {
-                    "Live Desk Ready · Uses your existing Kraken Pro & Coinbase APIs on Render"
-                }
-            ),
-            LiveConnectorStatus(
-                route = LiveExecutionRoute.LG_OWNER_SERVER,
-                isConfigured = true,
-                detail = if (lgTokenReady) {
-                    "Ready · Encrypted Bearer token active · Owner control portal"
-                } else {
-                    "Live Desk Ready · Owner portal at lg-digital-owner.onrender.com"
-                }
-            ),
             LiveConnectorStatus(
                 route = LiveExecutionRoute.KRAKEN_DIRECT,
                 isConfigured = krakenReady,
@@ -129,66 +109,6 @@ class LiveTradingClient {
                     "Configure Bitstamp keys in Exchange Configuration"
                 }
             )
-        )
-    }
-
-    /**
-     * Pings one of the allowlisted HTTPS LG Render servers to wake it up and verify live reachability.
-     */
-    suspend fun checkServerHealth(
-        target: LiveServerTarget,
-        stored: EncryptedExchangeCredentials = EncryptedExchangeCredentials()
-    ): LiveServerHealth = withContext(Dispatchers.IO) {
-        val started = System.currentTimeMillis()
-        val token = resolveSecret(stored.lgServerToken, BuildConfig.LG_LIVE_API_TOKEN).ifBlank { null }
-        val probePaths = listOf("/health", "/api/health", "/api/status", "/")
-        var lastCode = 0
-        var lastErr = "Unreachable"
-
-        for (path in probePaths) {
-            try {
-                val reqBuilder = Request.Builder()
-                    .url("${target.baseUrl}$path")
-                    .header("User-Agent", "LGDigital-Android/2.0")
-                    .header("Accept", "application/json, text/html")
-                    .get()
-                if (token != null) {
-                    reqBuilder.header("Authorization", "Bearer $token")
-                }
-                client.newCall(reqBuilder.build()).execute().use { resp ->
-                    val elapsed = (System.currentTimeMillis() - started).coerceAtLeast(1L)
-                    lastCode = resp.code
-                    if (resp.code in 200..399 || resp.code == 401 || resp.code == 403) {
-                        val note = when {
-                            resp.code in 200..299 -> "ONLINE · HTTP ${resp.code} · ${elapsed}ms"
-                            resp.code in 300..399 -> "ONLINE (Redirect ${resp.code}) · ${elapsed}ms"
-                            else -> "ONLINE (Auth Protected · HTTP ${resp.code}) · ${elapsed}ms"
-                        }
-                        return@withContext LiveServerHealth(
-                            target = target,
-                            isOnline = true,
-                            isChecking = false,
-                            httpCode = resp.code,
-                            latencyMs = elapsed,
-                            statusDetail = note,
-                            checkedAtMs = System.currentTimeMillis()
-                        )
-                    }
-                    lastErr = "HTTP ${resp.code}"
-                }
-            } catch (e: Exception) {
-                lastErr = e.localizedMessage?.take(80) ?: "Connection timeout"
-            }
-        }
-
-        LiveServerHealth(
-            target = target,
-            isOnline = false,
-            isChecking = false,
-            httpCode = lastCode,
-            latencyMs = (System.currentTimeMillis() - started).coerceAtLeast(1L),
-            statusDetail = "Offline or cold-starting ($lastErr) — tap Ping again",
-            checkedAtMs = System.currentTimeMillis()
         )
     }
 
@@ -430,28 +350,6 @@ class LiveTradingClient {
             require(priceUsd.isFinite() && priceUsd > 0.0) { "Live market price unavailable for $cleanSymbol." }
 
             when (route) {
-                LiveExecutionRoute.LG_PRIVATE_SERVER -> relayOrderToLgServer(
-                    target = LiveServerTarget.LG_PRIVATE,
-                    route = route,
-                    exchange = connectedExchange,
-                    symbol = cleanSymbol,
-                    isBuy = isBuy,
-                    notionalUsd = notionalUsd,
-                    priceUsd = priceUsd,
-                    strategyId = strategyId,
-                    stored = stored
-                )
-                LiveExecutionRoute.LG_OWNER_SERVER -> relayOrderToLgServer(
-                    target = LiveServerTarget.LG_OWNER,
-                    route = route,
-                    exchange = connectedExchange,
-                    symbol = cleanSymbol,
-                    isBuy = isBuy,
-                    notionalUsd = notionalUsd,
-                    priceUsd = priceUsd,
-                    strategyId = strategyId,
-                    stored = stored
-                )
                 LiveExecutionRoute.KRAKEN_DIRECT -> placeKrakenSpotOrder(
                     symbol = cleanSymbol,
                     isBuy = isBuy,
@@ -482,94 +380,6 @@ class LiveTradingClient {
                 )
             }
         }
-    }
-
-    private fun relayOrderToLgServer(
-        target: LiveServerTarget,
-        route: LiveExecutionRoute,
-        exchange: ConnectedExchange,
-        symbol: String,
-        isBuy: Boolean,
-        notionalUsd: Double,
-        priceUsd: Double,
-        strategyId: String,
-        stored: EncryptedExchangeCredentials
-    ): LiveOrderReceipt {
-        val side = if (isBuy) "buy" else "sell"
-        val exchangeHint = when (exchange) {
-            ConnectedExchange.KRAKEN -> "kraken"
-            ConnectedExchange.COINBASE -> "coinbase"
-            ConnectedExchange.KUCOIN -> "kucoin"
-            ConnectedExchange.BITSTAMP -> "bitstamp"
-            ConnectedExchange.ALL_CONNECTED -> "auto"
-        }
-        val quantity = notionalUsd / priceUsd
-        val payload = JSONObject().apply {
-            put("mode", "live")
-            put("exchange", exchangeHint)
-            put("symbol", symbol)
-            put("pair", "$symbol-USD")
-            put("side", side)
-            put("type", "market")
-            put("notionalUsd", String.format(Locale.US, "%.2f", notionalUsd).toDouble())
-            put("amountUsd", String.format(Locale.US, "%.2f", notionalUsd).toDouble())
-            put("quantity", String.format(Locale.US, "%.8f", quantity).toDouble())
-            put("strategy", strategyId)
-            put("source", "lg_android_live")
-        }.toString()
-
-        val token = resolveSecret(stored.lgServerToken, BuildConfig.LG_LIVE_API_TOKEN).ifBlank { null }
-        val candidatePaths = listOf("/api/trade", "/api/order", "/api/live/order", "/api/orders")
-        var lastError = "No JSON order endpoint accepted request on ${target.host}"
-
-        for (path in candidatePaths) {
-            val reqBuilder = Request.Builder()
-                .url("${target.baseUrl}$path")
-                .header("User-Agent", "LGDigital-Android/2.0")
-                .header("Accept", "application/json")
-                .post(payload.toRequestBody(jsonMediaType))
-            if (token != null) {
-                reqBuilder.header("Authorization", "Bearer $token")
-            }
-            client.newCall(reqBuilder.build()).execute().use { resp ->
-                val rawBody = resp.body?.string().orEmpty()
-                if (resp.isSuccessful) {
-                    val json = runCatching { JSONObject(rawBody) }.getOrNull()
-                    val orderId = json?.optString("orderId")
-                        ?.ifBlank { json.optString("id") }
-                        ?.ifBlank { json.optString("txid") }
-                        ?.ifBlank { "SRV-${System.currentTimeMillis() % 100000}" }
-                        ?: "SRV-${System.currentTimeMillis() % 100000}"
-                    val detail = json?.optString("message")
-                        ?.ifBlank { json.optString("status") }
-                        ?.ifBlank { "Accepted by ${target.title} ($path)" }
-                        ?: "Accepted by ${target.title}"
-                    return LiveOrderReceipt(
-                        route = route,
-                        exchangeOrderId = orderId,
-                        symbol = symbol,
-                        side = side.uppercase(Locale.US),
-                        notionalUsd = notionalUsd,
-                        statusText = detail
-                    )
-                }
-                if (resp.code == 401 || resp.code == 403) {
-                    throw IllegalStateException(
-                        "${target.title} requires auth (HTTP ${resp.code}). Open LIVE LG DESK to sign in or add your token in Exchange Configuration."
-                    )
-                }
-                if (resp.code != 404 && resp.code != 405) {
-                    val serverMsg = runCatching { JSONObject(rawBody).optString("error").ifBlank { JSONObject(rawBody).optString("message") } }.getOrNull()
-                    throw IllegalStateException(
-                        "${target.title} rejected order (HTTP ${resp.code}): ${serverMsg?.take(140) ?: "Check server trade route"}"
-                    )
-                }
-                lastError = "HTTP ${resp.code} on $path"
-            }
-        }
-        throw IllegalStateException(
-            "${target.title} uses web dashboard session controls ($lastError). Tap OPEN LIVE to trade inside your live Kraken Pro & Coinbase dashboard, or choose KRAKEN PRO / COINBASE Direct."
-        )
     }
 
     private fun placeKrakenSpotOrder(

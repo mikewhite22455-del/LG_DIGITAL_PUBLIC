@@ -274,47 +274,12 @@ enum class ExecutionMode(val label: String) {
     LIVE("LIVE")
 }
 
-enum class LiveServerTarget(
-    val id: String,
-    val title: String,
-    val subtitle: String,
-    val baseUrl: String,
-    val host: String
-) {
-    LG_PRIVATE(
-        id = "lg_private",
-        title = "LG Private Server",
-        subtitle = "Kraken Pro + Coinbase already connected",
-        baseUrl = "https://lg-digital-private.onrender.com",
-        host = "lg-digital-private.onrender.com"
-    ),
-    LG_OWNER(
-        id = "lg_owner",
-        title = "LG Owner Server",
-        subtitle = "Owner live control desk & bot telemetry",
-        baseUrl = "https://lg-digital-owner.onrender.com",
-        host = "lg-digital-owner.onrender.com"
-    )
-}
-
 enum class LiveExecutionRoute(
     val id: String,
     val label: String,
     val shortBadge: String,
     val description: String
 ) {
-    LG_PRIVATE_SERVER(
-        id = "lg_private_server",
-        label = "LG Private Server (Kraken + Coinbase)",
-        shortBadge = "LG PRIVATE",
-        description = "Routes orders through your live Render server at lg-digital-private.onrender.com"
-    ),
-    LG_OWNER_SERVER(
-        id = "lg_owner_server",
-        label = "LG Owner Server",
-        shortBadge = "LG OWNER",
-        description = "Routes orders through your live Render server at lg-digital-owner.onrender.com"
-    ),
     KRAKEN_DIRECT(
         id = "kraken_direct",
         label = "Kraken Pro Direct API",
@@ -340,16 +305,6 @@ enum class LiveExecutionRoute(
         description = "Direct v2 HMAC-SHA256 signed spot orders on Bitstamp"
     )
 }
-
-data class LiveServerHealth(
-    val target: LiveServerTarget,
-    val isOnline: Boolean,
-    val isChecking: Boolean = false,
-    val httpCode: Int = 0,
-    val latencyMs: Long = 0L,
-    val statusDetail: String = "Tap Ping to check Render server",
-    val checkedAtMs: Long = 0L
-)
 
 data class LiveConnectorStatus(
     val route: LiveExecutionRoute,

@@ -30,7 +30,6 @@ import com.example.domain.models.FearGreedIndexData
 import com.example.domain.models.HistoryWindow
 import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.LiveExecutionRoute
-import com.example.domain.models.LiveServerTarget
 import com.example.domain.models.MarketBreadth
 import com.example.domain.models.MarketTicker
 import com.example.domain.models.RiskProfile
@@ -99,7 +98,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loadAssetHistory("BTC", HistoryWindow.H24)
         loadTradeContext("BTC", ChartTimeframe.H1, StrategyType.TREND_CROSS)
         scanEntireExchangeForProfit(autoApplyBest = false)
-        pingLiveServers()
         scanArbitrage()
         scanBreakouts()
         searchDexPairs("SOL")
@@ -168,7 +166,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _exchangeConfigState.update {
                 it.copy(statusMessage = "LG Render server token encrypted and saved locally.")
             }
-            pingLiveServers()
         }
     }
 
@@ -995,71 +992,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectLiveExecutionRoute(route: LiveExecutionRoute) {
         val creds = _exchangeConfigState.value.credentials
-        val serverTarget = when (route) {
-            LiveExecutionRoute.LG_OWNER_SERVER -> LiveServerTarget.LG_OWNER
-            else -> LiveServerTarget.LG_PRIVATE
-        }
         _tradeState.update {
             it.copy(
                 liveExecutionRoute = route,
-                activeLiveServerTarget = serverTarget,
                 liveConnectors = liveTradingClient.getConnectorStatuses(creds),
                 statusBanner = "Live route selected: ${route.label}"
             )
-        }
-    }
-
-    fun selectLiveServerTarget(target: LiveServerTarget) {
-        val route = when (target) {
-            LiveServerTarget.LG_PRIVATE -> LiveExecutionRoute.LG_PRIVATE_SERVER
-            LiveServerTarget.LG_OWNER -> LiveExecutionRoute.LG_OWNER_SERVER
-        }
-        _tradeState.update {
-            it.copy(
-                activeLiveServerTarget = target,
-                liveExecutionRoute = route
-            )
-        }
-        pingLiveServer(target)
-    }
-
-    fun pingLiveServers() {
-        pingLiveServer(LiveServerTarget.LG_PRIVATE)
-        pingLiveServer(LiveServerTarget.LG_OWNER)
-    }
-
-    fun pingLiveServer(target: LiveServerTarget) {
-        viewModelScope.launch {
-            _tradeState.update { state ->
-                when (target) {
-                    LiveServerTarget.LG_PRIVATE -> state.copy(
-                        privateServerHealth = state.privateServerHealth.copy(
-                            isChecking = true,
-                            statusDetail = "Waking & pinging lg-digital-private.onrender.com..."
-                        )
-                    )
-                    LiveServerTarget.LG_OWNER -> state.copy(
-                        ownerServerHealth = state.ownerServerHealth.copy(
-                            isChecking = true,
-                            statusDetail = "Waking & pinging lg-digital-owner.onrender.com..."
-                        )
-                    )
-                }
-            }
-            val creds = credentialStore.getCredentials()
-            val result = liveTradingClient.checkServerHealth(target, creds)
-            _tradeState.update { state ->
-                when (target) {
-                    LiveServerTarget.LG_PRIVATE -> state.copy(
-                        privateServerHealth = result,
-                        liveConnectors = liveTradingClient.getConnectorStatuses(creds)
-                    )
-                    LiveServerTarget.LG_OWNER -> state.copy(
-                        ownerServerHealth = result,
-                        liveConnectors = liveTradingClient.getConnectorStatuses(creds)
-                    )
-                }
-            }
         }
     }
 

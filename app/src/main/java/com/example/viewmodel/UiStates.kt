@@ -94,16 +94,7 @@ data class TradeUiState(
     val exchangeScanSummary: String? = null,
     val lastExchangeScanMs: Long = 0L,
     val executionMode: com.example.domain.models.ExecutionMode = com.example.domain.models.ExecutionMode.PAPER,
-    val liveExecutionRoute: com.example.domain.models.LiveExecutionRoute = com.example.domain.models.LiveExecutionRoute.LG_PRIVATE_SERVER,
-    val activeLiveServerTarget: com.example.domain.models.LiveServerTarget = com.example.domain.models.LiveServerTarget.LG_PRIVATE,
-    val privateServerHealth: com.example.domain.models.LiveServerHealth = com.example.domain.models.LiveServerHealth(
-        target = com.example.domain.models.LiveServerTarget.LG_PRIVATE,
-        isOnline = false
-    ),
-    val ownerServerHealth: com.example.domain.models.LiveServerHealth = com.example.domain.models.LiveServerHealth(
-        target = com.example.domain.models.LiveServerTarget.LG_OWNER,
-        isOnline = false
-    ),
+    val liveExecutionRoute: com.example.domain.models.LiveExecutionRoute = com.example.domain.models.LiveExecutionRoute.KRAKEN_DIRECT,
     val liveConnectors: List<com.example.domain.models.LiveConnectorStatus> = emptyList(),
     val isSubmittingLiveOrder: Boolean = false,
     val recentLiveReceipts: List<com.example.domain.models.LiveOrderReceipt> = emptyList()

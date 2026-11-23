@@ -37,7 +37,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.models.ExecutionMode
 import com.example.domain.models.LiveExecutionRoute
-import com.example.domain.models.LiveServerTarget
 import com.example.domain.models.RiskProfile
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TabLabelTextStyle
@@ -50,8 +49,6 @@ fun LiveServerAndExecutionCard(
     onRequestArmLive: () -> Unit,
     onSwitchToPaper: () -> Unit,
     onSelectLiveRoute: (LiveExecutionRoute) -> Unit,
-    onPingLiveServers: () -> Unit,
-    onOpenLiveLgPortal: (LiveServerTarget) -> Unit,
     onOpenExchangeConfig: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -121,105 +118,7 @@ fun LiveServerAndExecutionCard(
             }
         }
 
-        // 2. Direct One-Tap Portals into Existing Live Render Servers (Kraken Pro & Coinbase already connected)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "EXISTING LIVE LG SERVERS (KRAKEN PRO + COINBASE)",
-                style = MaterialTheme.typography.labelSmall,
-                color = LgColors.Gold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = onPingLiveServers,
-                modifier = Modifier.testTag("ping_live_servers_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = "Ping live Render servers",
-                    tint = LgColors.Turquoise
-                )
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LiveServerTarget.entries.forEach { target ->
-                val health = if (target == LiveServerTarget.LG_PRIVATE) {
-                    state.privateServerHealth
-                } else {
-                    state.ownerServerHealth
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(LgColors.ObsidianBg.copy(alpha = 0.72f))
-                        .border(
-                            width = 1.dp,
-                            color = if (health.isOnline) LgColors.Turquoise.copy(alpha = 0.65f) else LgColors.Gold.copy(alpha = 0.45f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CloudDone,
-                        contentDescription = null,
-                        tint = if (health.isOnline) LgColors.Turquoise else LgColors.Gold,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = target.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = LgColors.GoldBright,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = target.subtitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LgColors.InkSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = health.statusDetail,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (health.isOnline) LgColors.Turquoise else LgColors.AmberWarn,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Button(
-                        onClick = { onOpenLiveLgPortal(target) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (target == LiveServerTarget.LG_PRIVATE) LgColors.Turquoise else LgColors.Gold,
-                            contentColor = LgColors.ObsidianBg
-                        ),
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("open_live_portal_${target.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.OpenInBrowser,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = if (target == LiveServerTarget.LG_PRIVATE) " OPEN LIVE" else " OWNER",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. Execution Route Selector (LG Private, LG Owner, Kraken Pro, Coinbase, KuCoin, Bitstamp)
+        // 2. Execution Route Selector (Kraken Pro, Coinbase, KuCoin, Bitstamp)
         Text(
             text = "LIVE EXECUTION ROUTE (CAP $${selectedRisk.maxOrderUsd.toInt()}/ORDER)",
             style = MaterialTheme.typography.labelSmall,

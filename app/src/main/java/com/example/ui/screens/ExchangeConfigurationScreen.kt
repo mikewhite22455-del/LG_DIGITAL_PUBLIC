@@ -832,7 +832,6 @@ fun ExchangeConfigurationScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Bearer token for lg-digital-private / lg-digital-owner API relay",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = LgColors.InkSecondary,
                                     modifier = Modifier.weight(1f)

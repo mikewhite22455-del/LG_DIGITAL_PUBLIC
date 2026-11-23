@@ -110,7 +110,6 @@ import com.example.core.Formatters
 import com.example.core.configureAppCheck
 import com.example.domain.models.ExecutionMode
 import com.example.domain.models.IndicatorBacktestConfig
-import com.example.domain.models.LiveServerTarget
 import com.example.ui.components.FloatingAiChatBoxSheet
 import com.example.ui.components.FloatingAiChatFab
 import com.example.ui.components.LgCircuitBackground
@@ -124,7 +123,6 @@ import com.example.ui.screens.ExchangeConfigurationScreen
 import com.example.ui.screens.HelpWalkthroughSheet
 import com.example.ui.screens.LabsScreen
 import com.example.ui.screens.LabsTool
-import com.example.ui.screens.LiveLgPortalScreen
 import com.example.ui.screens.PreviewDestination
 import com.example.ui.screens.TradeScreen
 import com.example.ui.screens.TradeSubWorkspace
@@ -248,7 +246,6 @@ fun LgDigitalAppShell(
     var welcomeStartOnSignIn by remember { mutableStateOf(false) }
     var showMembershipScreen by remember { mutableStateOf(false) }
     var showThemeGallery by remember { mutableStateOf(false) }
-    var showLiveLgPortal by remember { mutableStateOf(false) }
     var showPriceSummaryDashboard by remember { mutableStateOf(false) }
     var showExchangeConfig by remember { mutableStateOf(false) }
 
@@ -320,27 +317,8 @@ fun LgDigitalAppShell(
             onSelectPair = { sym ->
                 viewModel.selectTradeSymbol(sym)
                 showPriceSummaryDashboard = false
-                showLiveLgPortal = false
             },
             onClose = { showPriceSummaryDashboard = false }
-        )
-        return
-    }
-
-    if (showLiveLgPortal && !showExchangeConfig) {
-        LiveLgPortalScreen(
-            activeTarget = tradeState.activeLiveServerTarget,
-            privateHealth = tradeState.privateServerHealth,
-            ownerHealth = tradeState.ownerServerHealth,
-            isPrimaryLauncher = false,
-            onSelectTarget = viewModel::selectLiveServerTarget,
-            onPingTarget = viewModel::pingLiveServer,
-            onOpenPriceSummary = {
-                viewModel.refreshPriceSummaryDashboard(silent = false)
-                showPriceSummaryDashboard = true
-            },
-            onOpenExchangeConfig = { showExchangeConfig = true },
-            onClose = { showLiveLgPortal = false }
         )
         return
     }
@@ -701,26 +679,6 @@ fun LgDigitalAppShell(
                                 }
 
                                 TabDropdownItem(
-                                    label = "LIVE DESK · PRIVATE (KRAKEN+CB)",
-                                    icon = Icons.Filled.Bolt,
-                                    selected = false,
-                                    tag = "dropdown_tab_live_private"
-                                ) {
-                                    viewModel.selectLiveServerTarget(LiveServerTarget.LG_PRIVATE)
-                                    showLiveLgPortal = true
-                                }
-
-                                TabDropdownItem(
-                                    label = "LIVE DESK · OWNER PORTAL",
-                                    icon = Icons.Filled.CloudDone,
-                                    selected = false,
-                                    tag = "dropdown_tab_live_owner"
-                                ) {
-                                    viewModel.selectLiveServerTarget(LiveServerTarget.LG_OWNER)
-                                    showLiveLgPortal = true
-                                }
-
-                                TabDropdownItem(
                                     label = "EXCHANGE CONFIGURATION",
                                     icon = Icons.Filled.Key,
                                     selected = false,
@@ -1074,11 +1032,6 @@ fun LgDigitalAppShell(
                             onApplyAdaptiveOpportunity = viewModel::applyAdaptiveOpportunity,
                             onSetExecutionMode = viewModel::setExecutionMode,
                             onSelectLiveRoute = viewModel::selectLiveExecutionRoute,
-                            onPingLiveServers = viewModel::pingLiveServers,
-                            onOpenLiveLgPortal = { target ->
-                                viewModel.selectLiveServerTarget(target)
-                                showLiveLgPortal = true
-                            },
                             onOpenExchangeConfig = { showExchangeConfig = true }
                         )
                     }

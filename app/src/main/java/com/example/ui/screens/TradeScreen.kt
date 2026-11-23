@@ -65,7 +65,6 @@ import com.example.domain.models.ConnectedExchange
 import com.example.domain.models.ExecutionMode
 import com.example.domain.models.IndicatorBacktestConfig
 import com.example.domain.models.LiveExecutionRoute
-import com.example.domain.models.LiveServerTarget
 import com.example.domain.models.RiskProfile
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
@@ -123,8 +122,6 @@ fun TradeScreen(
     onApplyAdaptiveOpportunity: (AdaptiveOpportunity) -> Unit = {},
     onSetExecutionMode: (ExecutionMode) -> Unit = {},
     onSelectLiveRoute: (LiveExecutionRoute) -> Unit = {},
-    onPingLiveServers: () -> Unit = {},
-    onOpenLiveLgPortal: (LiveServerTarget) -> Unit = {},
     onOpenExchangeConfig: () -> Unit = {}
 ) {
     var localSubPanel by remember { mutableStateOf(activeWorkspace) }
@@ -172,7 +169,7 @@ fun TradeScreen(
                         color = LgColors.Turquoise
                     )
                     Text(
-                        text = "Your Kraken Pro & Coinbase APIs are already connected on lg-digital-private.onrender.com.",
+                        text = "Connect and manage your exchange APIs in Exchange Configuration.",
                         style = MaterialTheme.typography.bodySmall,
                         color = LgColors.InkSecondary
                     )
@@ -393,8 +390,6 @@ fun TradeScreen(
                         onRequestArmLive = { showConfirmLiveDialog = true },
                         onSwitchToPaper = { onSetExecutionMode(ExecutionMode.PAPER) },
                         onSelectLiveRoute = onSelectLiveRoute,
-                        onPingLiveServers = onPingLiveServers,
-                        onOpenLiveLgPortal = onOpenLiveLgPortal,
                         onOpenExchangeConfig = onOpenExchangeConfig
                     )
                 }
