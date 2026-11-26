@@ -1,0 +1,8 @@
+{
+  "name": "LG Digital",
+  "description": "Quantitative cryptocurrency trading, strategy backtesting studio, cross-exchange arbitrage scanner, AI trading advisor, and AES-256 encrypted exchange desk for Android.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
