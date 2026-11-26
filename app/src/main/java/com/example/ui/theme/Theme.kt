@@ -73,21 +73,21 @@ val RussoOneFontFamily = FontFamily(
 )
 
 val TradingViewFontFamily = FontFamily(
-    Font(R.font.jetbrains_mono, FontWeight.Normal),
-    Font(R.font.jetbrains_mono, FontWeight.SemiBold),
-    Font(R.font.jetbrains_mono, FontWeight.Bold)
+    Font(R.font.dm_mono, FontWeight.Normal),
+    Font(R.font.dm_mono, FontWeight.SemiBold),
+    Font(R.font.dm_mono, FontWeight.Bold)
 )
 
 private val BodyFontFamily = FontFamily(
-    Font(R.font.inter, FontWeight.Normal),
-    Font(R.font.inter, FontWeight.Medium),
-    Font(R.font.inter, FontWeight.SemiBold),
-    Font(R.font.inter, FontWeight.Bold)
+    Font(R.font.dm_sans, FontWeight.Normal),
+    Font(R.font.dm_sans, FontWeight.Medium),
+    Font(R.font.dm_sans, FontWeight.SemiBold),
+    Font(R.font.dm_sans, FontWeight.Bold)
 )
 
 private val DisplayFontFamily = FontFamily(
-    Font(R.font.rajdhani, FontWeight.SemiBold),
-    Font(R.font.rajdhani, FontWeight.Bold)
+    Font(R.font.chakra_petch, FontWeight.SemiBold),
+    Font(R.font.chakra_petch, FontWeight.Bold)
 )
 
 val TabLabelTextStyle = TextStyle(

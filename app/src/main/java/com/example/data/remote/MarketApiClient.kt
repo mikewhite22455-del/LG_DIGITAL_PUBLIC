@@ -295,8 +295,9 @@ class MarketApiClient {
     suspend fun fetchPublicOrderBooks(symbol: String): List<OrderBookSnapshot> = coroutineScope {
         val entry = CoinAssets.find(symbol)
         val krakenPair = entry?.krakenPair ?: "${symbol.uppercase()}USD"
-        val cbProduct = entry?.coinbaseProduct ?: "${symbol.uppercase()}-USD"
-        val bsPair = entry?.bitstampPair ?: "${symbol.lowercase()}usd"
+        val baseSymbol = entry?.symbol ?: symbol.uppercase()
+        val cbProduct = "$baseSymbol-USD"
+        val bsPair = "${baseSymbol.lowercase()}usd"
         val cdcInst = "${symbol.uppercase()}_USD"
 
         val tasks = listOf(
