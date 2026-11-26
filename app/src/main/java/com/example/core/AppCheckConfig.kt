@@ -56,7 +56,7 @@ fun configureAppCheck(context: Context, intent: Intent?) {
             )
             Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed.")
         }
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to initialize Firebase App Check", e)
+    } catch (t: Throwable) {
+        Log.e(TAG, "Failed to initialize Firebase App Check", t)
     }
 }

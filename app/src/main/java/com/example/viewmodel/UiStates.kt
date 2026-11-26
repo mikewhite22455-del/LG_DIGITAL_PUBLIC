@@ -165,12 +165,16 @@ data class AdvisorUiState(
         AdvisorMessage(
             id = "welcome",
             isUser = false,
-            text = "LG Digital Quant Copilot ready. Ask me about live market breadth, your active strategy signal, risk sizing, or cross-exchange arbitrage mechanics."
+            text = "LG Digital AI Trading Advisor connected to Gemini with live market telemetry. Ask about the active coin's setup, technical signals, backtest metrics, risk sizing, or cross-exchange arbitrage."
         )
     ),
     val streamingReply: String = "",
     val isGenerating: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val liveContextPreview: String = "",
+    val contextUpdatedAtMs: Long = 0L,
+    val contextSymbol: String = "BTC",
+    val isRefreshingContext: Boolean = false
 )
 
 enum class ExchangeHealthState {

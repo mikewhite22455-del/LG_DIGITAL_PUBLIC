@@ -148,6 +148,17 @@ fun BiometricLockScreen(
                                 .fillMaxWidth()
                                 .testTag("biometric_unlock_button")
                         )
+                        if (isError) {
+                            OutlinedButton(
+                                onClick = { onUnlocked(true) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("biometric_error_continue_button")
+                            ) {
+                                Text("Continue Without Biometrics", color = LgColors.Turquoise)
+                            }
+                        }
                     } else {
                         GoldMetallicButton(
                             text = "CONTINUE TO DASHBOARD",

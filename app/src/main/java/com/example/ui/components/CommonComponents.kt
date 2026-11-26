@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -68,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.core.CoinAssets
+import com.example.core.Formatters
 import com.example.domain.models.SignalAction
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.RussoOneFontFamily
@@ -100,6 +103,9 @@ fun LgCircuitBackground(
             .drawBehind {
                 val w = size.width
                 val h = size.height
+                if (w <= 1f || h <= 1f) return@drawBehind
+                val topRadius = (maxOf(w, h) * 0.62f).coerceAtLeast(1f)
+                val bottomRadius = (maxOf(w, h) * 0.48f).coerceAtLeast(1f)
 
                 // Ambient bright turquoise radial glow near top center
                 drawCircle(
@@ -110,10 +116,10 @@ fun LgCircuitBackground(
                             Color.Transparent
                         ),
                         center = Offset(w * 0.5f, h * 0.14f),
-                        radius = maxOf(w, h) * 0.62f
+                        radius = topRadius
                     ),
                     center = Offset(w * 0.5f, h * 0.14f),
-                    radius = maxOf(w, h) * 0.62f
+                    radius = topRadius
                 )
 
                 // Warm bright gold radial shimmer near bottom right
@@ -124,10 +130,10 @@ fun LgCircuitBackground(
                             Color.Transparent
                         ),
                         center = Offset(w * 0.85f, h * 0.84f),
-                        radius = maxOf(w, h) * 0.48f
+                        radius = bottomRadius
                     ),
                     center = Offset(w * 0.85f, h * 0.84f),
-                    radius = maxOf(w, h) * 0.48f
+                    radius = bottomRadius
                 )
 
                 // Full-screen glowing turquoise lined matrix grid (horizontal + vertical lines)
@@ -324,6 +330,8 @@ fun CyberFrameCard(
                 val cornerLen = 30f
                 val w = size.width
                 val h = size.height
+                if (w <= 1f || h <= 1f) return@drawBehind
+                val cardGlowRadius = (maxOf(w, h) * 0.55f).coerceAtLeast(1f)
 
                 // Bright turquoise radial + lined circuit traces behind card content
                 drawCircle(
@@ -333,10 +341,10 @@ fun CyberFrameCard(
                             Color.Transparent
                         ),
                         center = Offset(w * 0.18f, h * 0.16f),
-                        radius = maxOf(w, h) * 0.55f
+                        radius = cardGlowRadius
                     ),
                     center = Offset(w * 0.18f, h * 0.16f),
-                    radius = maxOf(w, h) * 0.55f
+                    radius = cardGlowRadius
                 )
                 // Subtle internal turquoise blueprint lines
                 val step = 46f
@@ -574,12 +582,21 @@ private fun SingleSentimentGauge(
 fun CoinAvatar(
     symbol: String,
     size: Dp = 36.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    logoUrl: String? = null
 ) {
     val cleanSym = symbol.trim().uppercase()
-        .removeSuffix("USD")
-        .removeSuffix("-USD")
         .removeSuffix("/USD")
+        .removeSuffix("-USD")
+        .removeSuffix("/USDT")
+        .removeSuffix("-USDT")
+        .let {
+            when (it) {
+                "XBT", "XXBT" -> "BTC"
+                "XDG", "XXDG" -> "DOGE"
+                else -> it
+            }
+        }
     val iconRes = CoinAssets.iconFor(cleanSym)
     if (iconRes != null) {
         Image(
@@ -592,11 +609,42 @@ fun CoinAvatar(
                 .border(1.2.dp, LgColors.Gold.copy(alpha = 0.65f), CircleShape)
         )
     } else {
-        CustomCoinLogoBadge(
-            symbol = cleanSym,
-            size = size,
+        val resolvedUrl = logoUrl?.takeIf { it.isNotBlank() }
+            ?: com.example.core.CoinLogoCache.urlFor(cleanSym)
+        val context = LocalContext.current
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = modifier
-        )
+                .size(size)
+                .clip(CircleShape)
+                .background(LgColors.PanelSlate)
+                .border(1.2.dp, LgColors.Gold.copy(alpha = 0.62f), CircleShape)
+        ) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(resolvedUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "$cleanSym coin logo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(1.5.dp)
+                    .clip(CircleShape),
+                loading = {
+                    CustomCoinLogoBadge(
+                        symbol = cleanSym,
+                        size = size
+                    )
+                },
+                error = {
+                    CustomCoinLogoBadge(
+                        symbol = cleanSym,
+                        size = size
+                    )
+                }
+            )
+        }
     }
 }
 
@@ -607,6 +655,17 @@ private fun CustomCoinLogoBadge(
     modifier: Modifier = Modifier
 ) {
     val palette = when (symbol) {
+        "BTC" -> Pair(Color(0xFFF7931A), Color(0xFF7A4407))
+        "ETH" -> Pair(Color(0xFF627EEA), Color(0xFF28377A))
+        "SOL" -> Pair(Color(0xFF14F195), Color(0xFF9945FF))
+        "XRP" -> Pair(Color(0xFF38BDF8), Color(0xFF0C4A6E))
+        "ADA" -> Pair(Color(0xFF3B82F6), Color(0xFF1E3A8A))
+        "DOGE" -> Pair(Color(0xFFC2A633), Color(0xFF5C4D11))
+        "AVAX" -> Pair(Color(0xFFE84142), Color(0xFF6B1516))
+        "LINK" -> Pair(Color(0xFF2A5ADA), Color(0xFF152C6E))
+        "DOT" -> Pair(Color(0xFFE6007A), Color(0xFF6E003B))
+        "LTC" -> Pair(Color(0xFF94A3B8), Color(0xFF334155))
+        "UNI" -> Pair(Color(0xFFFF007A), Color(0xFF6E0035))
         "USDT" -> Pair(Color(0xFF1BA27A), Color(0xFF0C5C45))
         "USDC" -> Pair(Color(0xFF2775CA), Color(0xFF14427A))
         "KAS" -> Pair(Color(0xFF49EACB), Color(0xFF0E534A))
@@ -614,7 +673,19 @@ private fun CustomCoinLogoBadge(
         "XMR" -> Pair(Color(0xFFFF6600), Color(0xFF282B30))
         "BNB" -> Pair(Color(0xFFF3BA2F), Color(0xFF6B4E09))
         "DASH" -> Pair(Color(0xFF008CE7), Color(0xFF0A3866))
-        else -> Pair(LgColors.Turquoise, LgColors.Gold)
+        else -> {
+            val hash = kotlin.math.abs(symbol.hashCode())
+            val accents = listOf(
+                Color(0xFF1CE8D0),
+                Color(0xFFFFD86B),
+                Color(0xFF60A5FA),
+                Color(0xFFA78BFA),
+                Color(0xFF34D399),
+                Color(0xFFF472B6),
+                Color(0xFFFB923C)
+            )
+            Pair(accents[hash % accents.size], LgColors.Gold)
+        }
     }
     Box(
         contentAlignment = Alignment.Center,
@@ -1295,6 +1366,53 @@ fun StatusPill(
     }
 }
 
+/**
+ * Compact 24H price movement pill pairing a clear directional up/down arrow icon
+ * with the formatted percentage delta for rapid scanning and color-independent accessibility.
+ */
+@Composable
+fun TrendChangeBadge(
+    changePct: Double,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    val isUp = changePct >= 0.0
+    val color = if (isUp) LgColors.Turquoise else LgColors.Crimson
+    val formatted = Formatters.formatPct(changePct)
+    val arrowDesc = if (isUp) "Up $formatted in 24 hours" else "Down $formatted in 24 hours"
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = color.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = if (compact) 6.dp else 8.dp,
+                vertical = if (compact) 2.dp else 3.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Icon(
+                imageVector = if (isUp) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                contentDescription = arrowDesc,
+                tint = color,
+                modifier = Modifier.size(if (compact) 11.dp else 13.dp)
+            )
+            Text(
+                text = formatted,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 @Composable
 fun MetricTile(
     label: String,
@@ -1380,6 +1498,9 @@ fun Modifier.circuitTextFieldBackdrop(
         .drawBehind {
             val w = size.width
             val h = size.height
+            if (w <= 1f || h <= 1f) return@drawBehind
+            val leftRadius = maxOf(w * 0.42f, h * 1.2f).coerceAtLeast(1f)
+            val rightRadius = maxOf(w * 0.32f, h * 1.1f).coerceAtLeast(1f)
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
@@ -1387,10 +1508,10 @@ fun Modifier.circuitTextFieldBackdrop(
                         Color.Transparent
                     ),
                     center = Offset(w * 0.15f, h * 0.5f),
-                    radius = maxOf(w * 0.42f, h * 1.2f)
+                    radius = leftRadius
                 ),
                 center = Offset(w * 0.15f, h * 0.5f),
-                radius = maxOf(w * 0.42f, h * 1.2f)
+                radius = leftRadius
             )
             drawCircle(
                 brush = Brush.radialGradient(
@@ -1399,10 +1520,10 @@ fun Modifier.circuitTextFieldBackdrop(
                         Color.Transparent
                     ),
                     center = Offset(w * 0.88f, h * 0.5f),
-                    radius = maxOf(w * 0.32f, h * 1.1f)
+                    radius = rightRadius
                 ),
                 center = Offset(w * 0.88f, h * 0.5f),
-                radius = maxOf(w * 0.32f, h * 1.1f)
+                radius = rightRadius
             )
             drawCircuitPath(
                 points = listOf(

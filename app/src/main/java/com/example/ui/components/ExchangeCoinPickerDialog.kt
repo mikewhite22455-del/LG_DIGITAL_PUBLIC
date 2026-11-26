@@ -378,7 +378,11 @@ fun ExchangeCoinPickerDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                CoinAvatar(symbol = coin.symbol, size = 28.dp)
+                                CoinAvatar(
+                                    symbol = coin.symbol,
+                                    size = 30.dp,
+                                    logoUrl = coin.resolvedLogoUrl
+                                )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = displayTitle,
@@ -397,13 +401,21 @@ fun ExchangeCoinPickerDialog(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = "Selected coin",
-                                        tint = LgColors.Turquoise,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    coin.exchanges.take(3).forEach { venue ->
+                                        ExchangeLogo(exchangeName = venue, size = 18.dp)
+                                    }
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = "Selected coin",
+                                            tint = LgColors.Turquoise,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

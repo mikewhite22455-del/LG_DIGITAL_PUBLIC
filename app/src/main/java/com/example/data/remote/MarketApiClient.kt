@@ -84,6 +84,10 @@ class MarketApiClient {
             } else {
                 emptyList()
             }
+            val imageUrl = obj.optString("image").trim()
+            if (imageUrl.isNotBlank()) {
+                com.example.core.CoinLogoCache.register(sym, imageUrl)
+            }
             list += MarketTicker(
                 symbol = sym,
                 name = entry?.name ?: obj.optString("name", sym),
@@ -1093,10 +1097,10 @@ class MarketApiClient {
                 .map { it.trim().lowercase() }
                 .filter { it in setOf("kraken", "coinbase", "kucoin", "bitstamp") }
                 .distinct()
-                .ifEmpty { listOf("kraken") }
+                .ifEmpty { listOf("kraken", "coinbase", "kucoin") }
 
-            val perExchangeResults = coroutineScope {
-                targets.map { exId ->
+            val (perExchangeResults, coinbaseNames, kuCoinNames) = coroutineScope {
+                val exchangeDeferred = targets.map { exId ->
                     async(Dispatchers.IO) {
                         exId to runCatching {
                             when (exId) {
@@ -1108,7 +1112,20 @@ class MarketApiClient {
                             }
                         }.getOrDefault(emptyList())
                     }
-                }.awaitAll()
+                }
+                val cbNamesDeferred = async(Dispatchers.IO) {
+                    if ("coinbase" in targets) runCatching { fetchCoinbaseCurrencyNames() }.getOrDefault(emptyMap())
+                    else emptyMap()
+                }
+                val kcNamesDeferred = async(Dispatchers.IO) {
+                    if ("kucoin" in targets) runCatching { fetchKuCoinCurrencyNames() }.getOrDefault(emptyMap())
+                    else emptyMap()
+                }
+                Triple(
+                    exchangeDeferred.awaitAll(),
+                    cbNamesDeferred.await(),
+                    kcNamesDeferred.await()
+                )
             }
 
             // Merge coins across requested exchanges, preserving preferred USD/USDT pairs
@@ -1133,15 +1150,21 @@ class MarketApiClient {
 
             val merged = exchangesBySymbol.entries.map { (sym, venues) ->
                 val known = CoinAssets.find(sym)
+                val resolvedName = known?.name
+                    ?: coinbaseNames[sym]
+                    ?: kuCoinNames[sym]
+                    ?: sym
                 com.example.core.ExchangeListedCoin(
                     symbol = sym,
-                    name = known?.name ?: sym,
+                    name = resolvedName,
                     exchanges = venues.toList(),
-                    primaryPair = pairBySymbol[sym] ?: "$sym/USD"
+                    primaryPair = pairBySymbol[sym] ?: "$sym/USD",
+                    logoUrl = com.example.core.CoinLogoCache.urlFor(sym)
                 )
             }.sortedWith(
                 compareBy<com.example.core.ExchangeListedCoin>(
                     { featuredOrder[it.symbol] ?: Int.MAX_VALUE },
+                    { -it.exchanges.size },
                     { it.symbol }
                 )
             )
@@ -1151,6 +1174,35 @@ class MarketApiClient {
             }
             merged
         }
+    }
+
+    private fun fetchCoinbaseCurrencyNames(): Map<String, String> {
+        val arr = JSONArray(fetchString("https://api.exchange.coinbase.com/currencies"))
+        val map = LinkedHashMap<String, String>(arr.length())
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val id = obj.optString("id").trim().uppercase()
+            val name = obj.optString("name").trim()
+            if (id.isNotBlank() && name.isNotBlank()) {
+                map[id] = name
+            }
+        }
+        return map
+    }
+
+    private fun fetchKuCoinCurrencyNames(): Map<String, String> {
+        val root = JSONObject(fetchString("https://api.kucoin.com/api/v3/currencies"))
+        val arr = root.optJSONArray("data") ?: return emptyMap()
+        val map = LinkedHashMap<String, String>(arr.length())
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val code = obj.optString("currency").trim().uppercase()
+            val fullName = obj.optString("fullName").trim().ifBlank { obj.optString("name").trim() }
+            if (code.isNotBlank() && fullName.isNotBlank()) {
+                map[code] = fullName
+            }
+        }
+        return map
     }
 
     private fun fetchKrakenAllListedCoins(): List<Triple<String, String, String>> {

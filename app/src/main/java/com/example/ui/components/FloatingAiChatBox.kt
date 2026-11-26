@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,7 +30,11 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,9 +69,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.core.Formatters
+import com.example.domain.models.UiState
 import com.example.ui.theme.LgColors
 import com.example.ui.theme.TradingViewFontFamily
 import com.example.viewmodel.AdvisorUiState
+import com.example.viewmodel.MarketsUiState
+import com.example.viewmodel.TradeUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Floating bottom-right AI Chat Box launcher button displayed across every screen.
@@ -112,7 +124,6 @@ fun FloatingAiChatFab(
             )
         }
 
-        // Crisp bright turquoise & gold AI chat bubble badge in bottom-right of FAB
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -141,27 +152,44 @@ fun FloatingAiChatFab(
 }
 
 /**
- * Pop-up Floating AI Chat Box Sheet accessible from any page via the bottom-right FAB.
+ * Pop-up Floating AI Chat Box Sheet accessible from any page via the bottom-right FAB,
+ * grounded live in the current market tickers, Fear & Greed index, signal, and portfolio state.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloatingAiChatBoxSheet(
     advisorState: AdvisorUiState,
     activeSymbol: String,
+    marketsState: MarketsUiState? = null,
+    tradeState: TradeUiState? = null,
     onSendPrompt: (String) -> Unit,
     onRetryLastPrompt: () -> Unit = {},
+    onRefreshContext: () -> Unit = {},
+    onClearChat: () -> Unit = {},
     onOpenFullAdvisor: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var inputText by remember { mutableStateOf("") }
+    var showLiveContext by remember { mutableStateOf(false) }
     val chatListState = rememberLazyListState()
-    val visibleMessages = remember(advisorState.messages) { advisorState.messages.takeLast(12) }
-    val quickPrompts = remember(activeSymbol) {
+    val visibleMessages = remember(advisorState.messages) { advisorState.messages.takeLast(14) }
+
+    val tickers = (marketsState?.tickersState as? UiState.Success)?.data.orEmpty()
+    val activeTicker = remember(tickers, activeSymbol) {
+        tickers.firstOrNull { it.symbol.equals(activeSymbol, ignoreCase = true) }
+    }
+    val fearGreed = (marketsState?.fearGreedState as? UiState.Success)?.data
+    val updatedLabel = remember(advisorState.contextUpdatedAtMs) {
+        if (advisorState.contextUpdatedAtMs <= 0L) "Live"
+        else SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(advisorState.contextUpdatedAtMs))
+    }
+
+    val quickPrompts = remember(activeSymbol, activeTicker?.priceUsd, fearGreed?.liveValue) {
         listOf(
-            "Quick $activeSymbol outlook",
+            "Quick $activeSymbol${activeTicker?.let { " (${Formatters.formatUsd(it.priceUsd)})" }.orEmpty()} outlook",
             "Best strategy right now?",
             "Check my risk & drawdown",
-            "Explain Fear & Greed signal"
+            if (fearGreed != null) "Fear & Greed (${fearGreed.liveValue}) read" else "Top market movers today"
         )
     }
 
@@ -182,7 +210,7 @@ fun FloatingAiChatBoxSheet(
                 .fillMaxWidth()
                 .widthIn(max = 620.dp)
                 .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Header
             Row(
@@ -206,33 +234,45 @@ fun FloatingAiChatBoxSheet(
                     )
                     Column {
                         Text(
-                            text = "LG AI CHAT",
+                            text = "LG AI ADVISOR · GEMINI",
                             fontFamily = TradingViewFontFamily,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             color = LgColors.GoldBright
                         )
                         Text(
-                            text = "Live Quant Copilot · $activeSymbol",
+                            text = buildString {
+                                append(activeSymbol)
+                                activeTicker?.let {
+                                    append(" · ${Formatters.formatUsd(it.priceUsd)} (${Formatters.formatPct(it.change24hPct)})")
+                                }
+                                append(" · $updatedLabel")
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = LgColors.Turquoise
                         )
                     }
                 }
-                OutlinedButton(
-                    onClick = {
-                        onDismiss()
-                        onOpenFullAdvisor()
-                    },
-                    border = BorderStroke(1.dp, LgColors.Turquoise.copy(alpha = 0.7f)),
-                    modifier = Modifier.heightIn(min = 40.dp)
+                IconButton(
+                    onClick = onRefreshContext,
+                    enabled = !advisorState.isRefreshingContext,
+                    modifier = Modifier.testTag("floating_ai_refresh_context")
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = null,
-                        tint = LgColors.Turquoise,
-                        modifier = Modifier.size(15.dp).padding(end = 4.dp)
+                        imageVector = Icons.Filled.Sync,
+                        contentDescription = "Sync live market data",
+                        tint = LgColors.Turquoise
                     )
-                    Text("Full Desk", color = LgColors.Turquoise, fontSize = 11.sp)
+                }
+                IconButton(
+                    onClick = onClearChat,
+                    enabled = !advisorState.isGenerating,
+                    modifier = Modifier.testTag("floating_ai_clear_chat")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.DeleteSweep,
+                        contentDescription = "Clear AI chat",
+                        tint = LgColors.Gold
+                    )
                 }
                 IconButton(onClick = onDismiss) {
                     Icon(
@@ -243,12 +283,88 @@ fun FloatingAiChatBoxSheet(
                 }
             }
 
+            // Compact Live Market Context Status Strip (auto-updates from live market telemetry)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(LgColors.ObsidianBg.copy(alpha = 0.72f))
+                    .border(1.dp, LgColors.Turquoise.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showLiveContext = !showLiveContext }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        StatusPill(
+                            text = if (tradeState?.isLiveMode == true) "LIVE" else "PAPER",
+                            color = if (tradeState?.isLiveMode == true) LgColors.Turquoise else LgColors.Gold
+                        )
+                        tradeState?.liveSignal?.let { sig ->
+                            StatusPill(
+                                text = "${sig.action.name} ${(sig.confidence * 100).toInt()}%",
+                                color = LgColors.CyanGlow
+                            )
+                        }
+                        fearGreed?.let { fg ->
+                            StatusPill(
+                                text = "F&G ${fg.liveValue}",
+                                color = if (fg.liveValue >= 50) LgColors.Turquoise else LgColors.AmberWarn
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                onDismiss()
+                                onOpenFullAdvisor()
+                            },
+                            border = BorderStroke(1.dp, LgColors.Turquoise.copy(alpha = 0.6f)),
+                            modifier = Modifier.heightIn(min = 32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = null,
+                                tint = LgColors.Turquoise,
+                                modifier = Modifier.size(13.dp).padding(end = 3.dp)
+                            )
+                            Text("Desk", color = LgColors.Turquoise, fontSize = 11.sp)
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showLiveContext) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = "Toggle live market context",
+                        tint = LgColors.Turquoise,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                AnimatedVisibility(visible = showLiveContext) {
+                    Text(
+                        text = advisorState.liveContextPreview.ifBlank { "Syncing live market context..." },
+                        fontFamily = TradingViewFontFamily,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = LgColors.InkSecondary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 10.dp, end = 10.dp, bottom = 8.dp)
+                    )
+                }
+            }
+
             // Recent Messages
             LazyColumn(
                 state = chatListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 160.dp, max = 280.dp)
+                    .heightIn(min = 160.dp, max = 270.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .circuitTextFieldBackdrop(cornerRadius = 12.dp)
                     .padding(10.dp),
@@ -257,7 +373,7 @@ fun FloatingAiChatBoxSheet(
                 if (visibleMessages.isEmpty() && !advisorState.isGenerating) {
                     item {
                         Text(
-                            text = "Ask me anything about $activeSymbol, live strategies, arbitrage spreads, sports odds, or mining yields.",
+                            text = "Ask Gemini about $activeSymbol, live strategies, arbitrage spreads, or portfolio risk.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = LgColors.InkSecondary
                         )
@@ -284,7 +400,7 @@ fun FloatingAiChatBoxSheet(
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = if (msg.isUser) "YOU" else if (msg.isError) "SYSTEM" else "AI ADVISOR",
+                            text = if (msg.isUser) "YOU" else if (msg.isError) "SYSTEM" else "GEMINI ADVISOR",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (msg.isUser) LgColors.GoldBright else if (msg.isError) LgColors.Crimson else LgColors.Turquoise,
                             fontWeight = FontWeight.Bold
@@ -331,7 +447,7 @@ fun FloatingAiChatBoxSheet(
                                     color = LgColors.Turquoise
                                 )
                                 Text(
-                                    text = "Thinking...",
+                                    text = "Analyzing live $activeSymbol market data...",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = LgColors.Turquoise
                                 )
@@ -353,6 +469,7 @@ fun FloatingAiChatBoxSheet(
                 items(quickPrompts) { prompt ->
                     FilterChip(
                         selected = false,
+                        enabled = !advisorState.isGenerating,
                         onClick = { onSendPrompt(prompt) },
                         label = { Text(prompt, fontSize = 11.sp) }
                     )
@@ -368,7 +485,7 @@ fun FloatingAiChatBoxSheet(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    placeholder = { Text("Ask LG AI Advisor...") },
+                    placeholder = { Text("Ask Gemini AI Advisor...") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(

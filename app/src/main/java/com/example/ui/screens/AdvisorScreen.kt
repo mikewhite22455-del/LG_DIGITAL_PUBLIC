@@ -1,10 +1,12 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,28 +15,39 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -49,10 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.core.CoinAssets
 import com.example.core.Formatters
+import com.example.domain.models.SignalAction
 import com.example.domain.models.StrategyType
 import com.example.domain.models.UiState
 import com.example.ui.components.CoinAvatar
@@ -60,14 +75,19 @@ import com.example.ui.components.CoinDropdownSelector
 import com.example.ui.components.CyberFrameCard
 import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.GlassPanelCard
+import com.example.ui.components.MetricTile
 import com.example.ui.components.SentimentArcGauges
 import com.example.ui.components.StatusPill
 import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
+import com.example.ui.theme.TradingViewFontFamily
 import com.example.viewmodel.AdvisorUiState
 import com.example.viewmodel.MarketsUiState
 import com.example.viewmodel.TradeUiState
 import com.example.viewmodel.VaultUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun AdvisorScreen(
@@ -78,24 +98,56 @@ fun AdvisorScreen(
     isWide: Boolean = false,
     onSendAdvisorPrompt: (String) -> Unit,
     onRetryLastPrompt: () -> Unit = {},
+    onClearChat: () -> Unit = {},
+    onRefreshContext: () -> Unit = {},
     onSelectStrategy: (StrategyType) -> Unit,
     onSelectCoin: (String) -> Unit
 ) {
     var promptInput by remember { mutableStateOf("") }
-
-    val quickPrompts = remember {
-        listOf(
-            "Analyze active setup & signal",
-            "Review paper drawdown risk",
-            "How do fees affect spot arb?",
-            "Supertrend vs Bollinger here"
-        )
-    }
+    var showContextDetails by remember { mutableStateOf(false) }
+    val chatScrollState = rememberLazyListState()
 
     val tickers = (marketsState.tickersState as? UiState.Success)?.data ?: emptyList()
+    val activeTicker = remember(tickers, tradeState.symbol) {
+        tickers.firstOrNull { it.symbol.equals(tradeState.symbol, ignoreCase = true) }
+    }
+    val fearGreed = (marketsState.fearGreedState as? UiState.Success)?.data
     val contextCoins = remember(tickers) {
         listOf("BTC", "ETH", "SOL", "XRP").mapNotNull { sym ->
             tickers.firstOrNull { it.symbol == sym }
+        }
+    }
+
+    val syncedTimeLabel = remember(advisorState.contextUpdatedAtMs) {
+        if (advisorState.contextUpdatedAtMs <= 0L) "Syncing..."
+        else SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(advisorState.contextUpdatedAtMs))
+    }
+
+    // Dynamic context-aware quick prompts reflecting live symbol, price, strategy, and market regime
+    val quickPrompts = remember(
+        tradeState.symbol,
+        tradeState.strategy,
+        tradeState.isLiveMode,
+        activeTicker?.priceUsd,
+        fearGreed?.liveValue,
+        tradeState.indicatorBacktestResult != null
+    ) {
+        buildList {
+            val pxLabel = activeTicker?.let { " at ${Formatters.formatUsd(it.priceUsd)}" }.orEmpty()
+            add("Analyze ${tradeState.symbol}$pxLabel (${tradeState.strategy.title})")
+            add(
+                if (tradeState.isLiveMode) "Review my Live ${tradeState.liveExecutionRoute.shortBadge} balance & risk"
+                else "Audit my Paper portfolio drawdown & sizing"
+            )
+            if (fearGreed != null) {
+                add("What does Fear & Greed ${fearGreed.liveValue} (${fearGreed.liveClassification}) mean for ${tradeState.symbol}?")
+            }
+            if (tradeState.indicatorBacktestResult != null) {
+                add("Critique my ${tradeState.symbol} backtest performance & alpha")
+            } else {
+                add("Best entry & stop-loss structure for ${tradeState.symbol} ${tradeState.timeframe.label}")
+            }
+            add("Top market movers & spot arbitrage edge right now")
         }
     }
 
@@ -117,6 +169,17 @@ fun AdvisorScreen(
         }
     }
 
+    LaunchedEffect(
+        advisorState.messages.size,
+        advisorState.isGenerating,
+        advisorState.streamingReply.length
+    ) {
+        val total = advisorState.messages.size + if (advisorState.isGenerating) 1 else 0
+        if (total > 0) {
+            chatScrollState.animateScrollToItem(total - 1)
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -124,123 +187,356 @@ fun AdvisorScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // AI Advisor Hero Portrait + Streaming Chat (clean robot portrait, no descriptive blurb beside robot head)
+        // AI Trading Advisor Chat Desk with Live Gemini Market Context
         item {
-            CyberFrameCard(title = "TRADING ADVISOR ANALYSIS") {
-                Column(
+            CyberFrameCard(title = "GEMINI AI TRADING ADVISOR") {
+                // Header Row with Avatar, Status Badges, Sync & Clear Controls
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_advisor_robot),
-                        contentDescription = "Trading Advisor",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .border(2.2.dp, LgColors.Gold.copy(alpha = 0.85f), CircleShape)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusPill(
-                            text = if (tradeState.isLiveMode) "LIVE · ${tradeState.liveExecutionRoute.shortBadge}" else "PAPER MODE",
-                            color = if (tradeState.isLiveMode) LgColors.Turquoise else LgColors.Gold
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_advisor_robot),
+                            contentDescription = "AI Trading Advisor",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, LgColors.GoldBright, CircleShape)
                         )
-                        StatusPill("${tradeState.symbol} ${tradeState.timeframe.label}", LgColors.CyanGlow)
-                        StatusPill(tradeState.strategy.title, LgColors.Gold)
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = LgColors.Turquoise,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "GEMINI 3.8 FLASH",
+                                    fontFamily = TradingViewFontFamily,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LgColors.GoldBright
+                                )
+                            }
+                            Text(
+                                text = "Live market telemetry synced · $syncedTimeLabel",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LgColors.Turquoise,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    CoinDropdownSelector(
-                        selectedSymbol = tradeState.symbol,
-                        symbols = CoinAssets.catalog.map { it.symbol },
-                        onSelectSymbol = onSelectCoin,
-                        label = "Active Advisor Coin",
-                        testTag = "advisor_coin_dropdown"
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        IconButton(
+                            onClick = onRefreshContext,
+                            enabled = !advisorState.isRefreshingContext,
+                            modifier = Modifier.testTag("advisor_refresh_context_button")
+                        ) {
+                            if (advisorState.isRefreshingContext) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = LgColors.Turquoise
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Sync,
+                                    contentDescription = "Sync live market data context",
+                                    tint = LgColors.Turquoise
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onClearChat,
+                            enabled = !advisorState.isGenerating,
+                            modifier = Modifier.testTag("advisor_clear_chat_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DeleteSweep,
+                                contentDescription = "Reset advisor conversation",
+                                tint = LgColors.Gold
+                            )
+                        }
+                    }
+                }
+
+                // Active Asset Selector (auto-updates Gemini market context on selection)
+                CoinDropdownSelector(
+                    selectedSymbol = tradeState.symbol,
+                    symbols = CoinAssets.catalog.map { it.symbol },
+                    onSelectSymbol = onSelectCoin,
+                    label = "Active Market Context Coin",
+                    testTag = "advisor_coin_dropdown"
+                )
+
+                // Live Market Context Telemetry Strip (updates automatically with market data)
+                val sigAction = tradeState.liveSignal?.action
+                val sigColor = when (sigAction) {
+                    SignalAction.BUY -> LgColors.Turquoise
+                    SignalAction.SELL -> LgColors.Crimson
+                    else -> LgColors.GoldBright
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricTile(
+                        label = "${tradeState.symbol} Spot",
+                        value = activeTicker?.let { Formatters.formatUsd(it.priceUsd) } ?: "--",
+                        valueColor = LgColors.GoldBright,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "24h Move",
+                        value = activeTicker?.let { Formatters.formatPct(it.change24hPct) } ?: "--",
+                        valueColor = if ((activeTicker?.change24hPct ?: 0.0) >= 0.0) LgColors.Turquoise else LgColors.Crimson,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricTile(
+                        label = "Signal",
+                        value = tradeState.liveSignal?.let { "${it.action.name} ${(it.confidence * 100).toInt()}%" } ?: "WAIT",
+                        valueColor = sigColor,
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
-                // Conversation Thread
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    advisorState.messages.takeLast(8).forEach { msg ->
-                        val bg = when {
-                            msg.isError -> LgColors.Crimson.copy(alpha = 0.14f)
-                            msg.isUser -> LgColors.Gold.copy(alpha = 0.18f)
-                            else -> LgColors.ElevatedSlate.copy(alpha = 0.85f)
+                // Expandable Live Market Context Feed Accordion (proves live grounding payload sent to Gemini)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LgColors.ObsidianBg.copy(alpha = 0.72f))
+                        .border(1.dp, LgColors.Turquoise.copy(alpha = 0.42f), RoundedCornerShape(10.dp))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable { showContextDetails = !showContextDetails }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("advisor_context_toggle"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            StatusPill(
+                                text = if (tradeState.isLiveMode) "LIVE · ${tradeState.liveExecutionRoute.shortBadge}" else "PAPER",
+                                color = if (tradeState.isLiveMode) LgColors.Turquoise else LgColors.Gold
+                            )
+                            if (fearGreed != null) {
+                                StatusPill(
+                                    text = "F&G ${fearGreed.liveValue}",
+                                    color = if (fearGreed.liveValue >= 50) LgColors.Turquoise else LgColors.AmberWarn
+                                )
+                            }
+                            Text(
+                                text = "Live Context Feed",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = LgColors.InkSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                        val borderColor = when {
-                            msg.isError -> LgColors.Crimson.copy(alpha = 0.6f)
-                            msg.isUser -> LgColors.Gold.copy(alpha = 0.55f)
-                            else -> LgColors.CyanGlow.copy(alpha = 0.45f)
-                        }
-                        Column(
+                        Icon(
+                            imageVector = if (showContextDetails) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = if (showContextDetails) "Hide live market context" else "Inspect live market context",
+                            tint = LgColors.Turquoise
+                        )
+                    }
+
+                    AnimatedVisibility(visible = showContextDetails) {
+                        Text(
+                            text = advisorState.liveContextPreview.ifBlank { "Syncing live market telemetry..." },
+                            fontFamily = TradingViewFontFamily,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            color = LgColors.InkSecondary,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(bg)
-                                .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                                .testTag("advisor_live_context_text")
+                        )
+                    }
+                }
+
+                // Auto-Scrolling Chat Conversation Transcript
+                LazyColumn(
+                    state = chatScrollState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 210.dp, max = 360.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(LgColors.ObsidianBg.copy(alpha = 0.65f))
+                        .border(1.dp, LgColors.BorderHairline, RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                        .testTag("advisor_chat_transcript"),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(advisorState.messages, key = { it.id }) { msg ->
+                        val isUser = msg.isUser
+                        val bg = when {
+                            msg.isError -> LgColors.Crimson.copy(alpha = 0.14f)
+                            isUser -> LgColors.Gold.copy(alpha = 0.18f)
+                            else -> LgColors.ElevatedSlate.copy(alpha = 0.9f)
+                        }
+                        val borderColor = when {
+                            msg.isError -> LgColors.Crimson.copy(alpha = 0.65f)
+                            isUser -> LgColors.GoldBright.copy(alpha = 0.6f)
+                            else -> LgColors.Turquoise.copy(alpha = 0.5f)
+                        }
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
                         ) {
-                            Text(
-                                text = if (msg.isUser) "OPERATOR" else if (msg.isError) "SYSTEM ERROR" else "AI ADVISOR",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (msg.isUser) LgColors.Gold else if (msg.isError) LgColors.Crimson else LgColors.CyanGlow,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = msg.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LgColors.InkPrimary
-                            )
-                            if (msg.isError && !advisorState.isGenerating) {
-                                androidx.compose.material3.TextButton(
-                                    onClick = onRetryLastPrompt,
-                                    modifier = Modifier.testTag("advisor_retry_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Refresh,
-                                        contentDescription = null,
-                                        tint = LgColors.GoldBright,
-                                        modifier = Modifier.size(16.dp).padding(end = 4.dp)
+                            Column(
+                                modifier = Modifier
+                                    .widthIn(max = 520.dp)
+                                    .fillMaxWidth(if (isUser) 0.9f else 0.96f)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 14.dp,
+                                            topEnd = 14.dp,
+                                            bottomStart = if (isUser) 14.dp else 4.dp,
+                                            bottomEnd = if (isUser) 4.dp else 14.dp
+                                        )
                                     )
-                                    Text("Retry Request", color = LgColors.GoldBright)
+                                    .background(bg)
+                                    .border(
+                                        1.dp,
+                                        borderColor,
+                                        RoundedCornerShape(
+                                            topStart = 14.dp,
+                                            topEnd = 14.dp,
+                                            bottomStart = if (isUser) 14.dp else 4.dp,
+                                            bottomEnd = if (isUser) 4.dp else 14.dp
+                                        )
+                                    )
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = when {
+                                            isUser -> "OPERATOR"
+                                            msg.isError -> "SYSTEM ERROR"
+                                            else -> "GEMINI ADVISOR"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = when {
+                                            isUser -> LgColors.GoldBright
+                                            msg.isError -> LgColors.Crimson
+                                            else -> LgColors.Turquoise
+                                        },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = SimpleDateFormat("HH:mm", Locale.US).format(Date(msg.timestampMs)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = LgColors.InkMuted
+                                    )
+                                }
+                                Text(
+                                    text = msg.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LgColors.InkPrimary
+                                )
+                                if (msg.isError && !advisorState.isGenerating) {
+                                    TextButton(
+                                        onClick = onRetryLastPrompt,
+                                        modifier = Modifier.testTag("advisor_retry_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Refresh,
+                                            contentDescription = null,
+                                            tint = LgColors.GoldBright,
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .padding(end = 4.dp)
+                                        )
+                                        Text("Retry Request", color = LgColors.GoldBright)
+                                    }
                                 }
                             }
                         }
                     }
 
                     if (advisorState.isGenerating) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(LgColors.ElevatedSlate)
-                                .border(1.dp, LgColors.Turquoise.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = LgColors.Turquoise)
-                                Text("Streaming analysis...", style = MaterialTheme.typography.labelSmall, color = LgColors.Turquoise)
-                            }
-                            if (advisorState.streamingReply.isNotBlank()) {
-                                Text(advisorState.streamingReply, style = MaterialTheme.typography.bodyMedium, color = LgColors.InkPrimary)
+                        item(key = "streaming_reply") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.96f)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(LgColors.ElevatedSlate)
+                                    .border(1.dp, LgColors.Turquoise.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(15.dp),
+                                        strokeWidth = 2.dp,
+                                        color = LgColors.Turquoise
+                                    )
+                                    Text(
+                                        text = "Analyzing live ${tradeState.symbol} telemetry...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = LgColors.Turquoise
+                                    )
+                                }
+                                if (advisorState.streamingReply.isNotBlank()) {
+                                    Text(
+                                        text = advisorState.streamingReply,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = LgColors.InkPrimary
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Quick Prompt Chips
+                // Dynamic Context-Aware Quick Prompt Chips
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(quickPrompts) { qp ->
                         FilterChip(
                             selected = false,
+                            enabled = !advisorState.isGenerating,
                             onClick = { onSendAdvisorPrompt(qp) },
-                            label = { Text(qp) }
+                            label = { Text(qp, maxLines = 1) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = LgColors.ElevatedSlate.copy(alpha = 0.85f),
+                                labelColor = LgColors.InkPrimary
+                            )
                         )
                     }
                 }
 
-                // Input Bar
+                // Message Input Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -249,7 +545,7 @@ fun AdvisorScreen(
                     OutlinedTextField(
                         value = promptInput,
                         onValueChange = { promptInput = it },
-                        placeholder = { Text("Type a question for Quant Copilot...") },
+                        placeholder = { Text("Ask Gemini about ${tradeState.symbol}, risk, or strategy...") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(
@@ -274,12 +570,17 @@ fun AdvisorScreen(
                     )
                     Button(
                         onClick = {
-                            val text = promptInput
-                            promptInput = ""
-                            onSendAdvisorPrompt(text)
+                            val text = promptInput.trim()
+                            if (text.isNotBlank()) {
+                                promptInput = ""
+                                onSendAdvisorPrompt(text)
+                            }
                         },
                         enabled = !advisorState.isGenerating && promptInput.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = LgColors.CyanGlow, contentColor = LgColors.ObsidianBg),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LgColors.Turquoise,
+                            contentColor = LgColors.ObsidianBg
+                        ),
                         modifier = Modifier
                             .heightIn(min = 52.dp)
                             .testTag("advisor_send_button")
@@ -290,7 +591,7 @@ fun AdvisorScreen(
             }
         }
 
-        // Strategy & Diagnostics + Risk Guards & Sentiment (matches Image 4 left & right panes)
+        // Strategy & Diagnostics + Risk Guards & Sentiment
         item {
             if (isWide) {
                 Row(
