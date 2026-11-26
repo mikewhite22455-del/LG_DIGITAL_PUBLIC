@@ -7,7 +7,9 @@ data class CoinAssetMeta(
     val name: String,
     val coingeckoId: String,
     val krakenPair: String,
-    @DrawableRes val iconRes: Int? = null
+    @DrawableRes val iconRes: Int? = null,
+    val coinbaseProduct: String = "${symbol.uppercase()}-USD",
+    val bitstampPair: String = "${symbol.lowercase()}usd"
 )
 
 object CoinAssets {

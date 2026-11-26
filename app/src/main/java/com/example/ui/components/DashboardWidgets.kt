@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -243,11 +245,24 @@ fun LiveTelemetryCommandCard(
                     ) {
                         Text(t.symbol, style = MaterialTheme.typography.labelLarge, color = LgColors.GoldBright)
                         Text(Formatters.formatUsd(t.priceUsd), style = MaterialTheme.typography.labelMedium, color = LgColors.InkPrimary)
-                        Text(
-                            Formatters.formatPct(t.change24hPct),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (t.change24hPct >= 0) LgColors.Turquoise else LgColors.Crimson
-                        )
+                        val isUp = t.change24hPct >= 0.0
+                        val trendColor = if (isUp) LgColors.Turquoise else LgColors.Crimson
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isUp) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                                contentDescription = if (isUp) "Price up in 24h" else "Price down in 24h",
+                                tint = trendColor,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                Formatters.formatPct(t.change24hPct),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = trendColor
+                            )
+                        }
                     }
                 }
             }
@@ -317,6 +332,34 @@ fun PriceSummaryDashboardCard(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "PAIR",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = LgColors.InkMuted,
+                        modifier = Modifier.weight(1.2f)
+                    )
+                    Text(
+                        text = "PRICE",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = LgColors.InkMuted,
+                        modifier = Modifier.weight(0.9f)
+                    )
+                    Text(
+                        text = "24H",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = LgColors.InkMuted
+                    )
+                }
                 filtered.take(6).forEach { row ->
                     Row(
                         modifier = Modifier
@@ -332,22 +375,26 @@ fun PriceSummaryDashboardCard(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1.2f)
                         ) {
                             CoinAvatar(row.symbol, size = 26.dp)
                             Column {
-                                Text(row.pairLabel, style = MaterialTheme.typography.titleSmall, color = LgColors.InkPrimary)
-                                Text(row.exchangeName, style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted)
+                                Text(row.pairLabel, style = MaterialTheme.typography.titleSmall, color = LgColors.InkPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(row.exchangeName, style = MaterialTheme.typography.labelSmall, color = LgColors.InkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(Formatters.formatUsd(row.priceUsd), style = MaterialTheme.typography.labelLarge, color = LgColors.GoldBright)
-                            Text(
-                                Formatters.formatPct(row.change24hPct),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (row.change24hPct >= 0) LgColors.Turquoise else LgColors.Crimson
-                            )
-                        }
+                        Text(
+                            text = Formatters.formatUsd(row.priceUsd),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = LgColors.GoldBright,
+                            maxLines = 1,
+                            modifier = Modifier.weight(0.9f)
+                        )
+                        TrendChangeBadge(
+                            changePct = row.change24hPct,
+                            compact = true,
+                            modifier = Modifier.testTag("summary_24h_trend_${row.exchangeId}_${row.symbol}")
+                        )
                     }
                 }
             }

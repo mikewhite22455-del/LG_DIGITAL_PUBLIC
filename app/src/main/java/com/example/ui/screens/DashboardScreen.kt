@@ -105,6 +105,7 @@ import com.example.domain.models.UiState
 import com.example.ui.components.AssetHistoricalView
 import com.example.ui.components.CoinAvatar
 import com.example.ui.components.CyberFrameCard
+import com.example.ui.components.DashboardCoinSearchAutocomplete
 import com.example.ui.components.ExchangeLogo
 import com.example.ui.components.FearGreedGaugeWidget
 import com.example.ui.components.GoldMetallicButton
@@ -115,6 +116,7 @@ import com.example.ui.components.PortfolioSummaryWidget
 import com.example.ui.components.PriceSummaryDashboardCard
 import com.example.ui.components.SocialMediaLinksBar
 import com.example.ui.components.StatusPill
+import com.example.ui.components.TrendChangeBadge
 import com.example.ui.components.circuitTextFieldBackdrop
 import com.example.ui.theme.LgColors
 import com.example.viewmodel.ArbitrageUiState
@@ -203,11 +205,11 @@ fun DashboardScreen(
                             )
                         }
                     }
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(Formatters.formatUsd(coin.priceUsd), style = MaterialTheme.typography.titleLarge)
-                        StatusPill(
-                            text = Formatters.formatPct(coin.change24hPct),
-                            color = if (up) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        TrendChangeBadge(
+                            changePct = coin.change24hPct,
+                            modifier = Modifier.testTag("coin_sheet_24h_trend_${coin.symbol}")
                         )
                     }
                 }
@@ -290,6 +292,31 @@ fun DashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 00. Global Coin Search with Auto-Complete Dropdown (Kraken · Coinbase · KuCoin)
+            item {
+                val loadedTickers = (marketsState.tickersState as? UiState.Success)?.data.orEmpty()
+                DashboardCoinSearchAutocomplete(
+                    query = marketsState.searchQuery,
+                    onQueryChange = onSearchChange,
+                    liveTickers = loadedTickers,
+                    onSelectCoin = { coin ->
+                        onSearchChange(coin.symbol)
+                        onSelectHistoryAsset(coin.symbol)
+                        onSelectCoinForTrade(coin.symbol)
+                        loadedTickers.firstOrNull {
+                            it.symbol.equals(coin.symbol, ignoreCase = true)
+                        }?.let { matchedTicker ->
+                            selectedCoinSheet = matchedTicker
+                        }
+                    },
+                    onOpenInTrade = { sym ->
+                        onSelectHistoryAsset(sym)
+                        onSelectCoinForTrade(sym)
+                        onNavigateToTrade()
+                    }
+                )
+            }
+
             // 0. Top Summary Widget: Total Portfolio Value & Daily P&L
             item {
                 val loadedTickers = (marketsState.tickersState as? UiState.Success)?.data.orEmpty()
@@ -655,6 +682,38 @@ fun DashboardScreen(
                                         }
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "ASSET",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "TREND",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    Text(
+                                                        text = "PRICE / 24H",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                                             filtered.forEachIndexed { idx, ticker ->
                                                 PriceFeedM3Row(
                                                     ticker = ticker,
@@ -1368,9 +1427,9 @@ private fun PriceFeedM3Row(
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    StatusPill(
-                        text = Formatters.formatPct(ticker.change24hPct),
-                        color = if (up) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    TrendChangeBadge(
+                        changePct = ticker.change24hPct,
+                        modifier = Modifier.testTag("market_24h_trend_${ticker.symbol}")
                     )
                 }
             }

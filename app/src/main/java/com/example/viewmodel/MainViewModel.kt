@@ -94,6 +94,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.example.core.ExchangeCoinCatalogStore.onRequestRefresh = { ex ->
             refreshExchangeCoinCatalog(overrideExchange = ex)
         }
+        com.example.core.ExchangeCoinCatalogStore.onRequestTriExchangeRefresh = {
+            refreshTriExchangeCoinCatalog()
+        }
+        refreshTriExchangeCoinCatalog()
         refreshExchangeCoinCatalog()
         refreshMarkets()
         refreshPriceSummaryDashboard()
@@ -108,6 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         searchDexPairs("SOL")
         loadMiningQuotes()
         startAutoLiveTelemetryLoop()
+        observeLiveAdvisorContext()
     }
 
     private fun observeEncryptedCredentials() {
@@ -122,8 +127,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Fetches the complete live list of EVERY coin offered by Kraken or whichever exchange(s)
-     * are currently attached/selected, updating ExchangeCoinCatalogStore for all coin dropdowns.
+     * Always fetches the complete live catalog of EVERY tradable coin supported by
+     * Kraken, Coinbase, and KuCoin for the Dashboard autocomplete search dropdown.
+     */
+    fun refreshTriExchangeCoinCatalog() {
+        viewModelScope.launch {
+            com.example.core.ExchangeCoinCatalogStore.update { st ->
+                st.copy(
+                    isLoadingTriExchange = true,
+                    triExchangeError = null
+                )
+            }
+
+            apiClient.fetchFullExchangeCoinCatalog(listOf("kraken", "coinbase", "kucoin"))
+                .onSuccess { coins ->
+                    val krakenCount = coins.count { c -> c.exchanges.any { it.equals("Kraken", ignoreCase = true) } }
+                    val coinbaseCount = coins.count { c -> c.exchanges.any { it.equals("Coinbase", ignoreCase = true) } }
+                    val kucoinCount = coins.count { c -> c.exchanges.any { it.equals("KuCoin", ignoreCase = true) } }
+                    val now = System.currentTimeMillis()
+                    com.example.core.ExchangeCoinCatalogStore.update { st ->
+                        st.copy(
+                            triExchangeCoins = coins,
+                            krakenCount = krakenCount,
+                            coinbaseCount = coinbaseCount,
+                            kucoinCount = kucoinCount,
+                            isLoadingTriExchange = false,
+                            triExchangeUpdatedMs = now,
+                            triExchangeError = null,
+                            coins = if (st.selectedFilter == ConnectedExchange.ALL_CONNECTED && st.attachedExchangeIds.isEmpty()) {
+                                coins
+                            } else {
+                                st.coins
+                            }
+                        )
+                    }
+                }
+                .onFailure { err ->
+                    com.example.core.ExchangeCoinCatalogStore.update { st ->
+                        st.copy(
+                            isLoadingTriExchange = false,
+                            triExchangeError = err.localizedMessage ?: "Kraken · Coinbase · KuCoin sync delayed"
+                        )
+                    }
+                }
+        }
+    }
+
+    /**
+     * Fetches the complete live list of EVERY coin offered by Kraken, Coinbase, KuCoin,
+     * or whichever exchange(s) are currently attached/selected for coin dropdowns.
      */
     fun refreshExchangeCoinCatalog(overrideExchange: ConnectedExchange? = null) {
         viewModelScope.launch {
@@ -141,10 +193,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "coinbase" -> ConnectedExchange.COINBASE
                     "kucoin" -> ConnectedExchange.KUCOIN
                     "bitstamp" -> ConnectedExchange.BITSTAMP
-                    else -> ConnectedExchange.KRAKEN
+                    else -> ConnectedExchange.ALL_CONNECTED
                 }
-                attachedIds.size > 1 -> ConnectedExchange.ALL_CONNECTED
-                else -> ConnectedExchange.KRAKEN
+                else -> ConnectedExchange.ALL_CONNECTED
             }
 
             val targetExchangeIds = when (effectiveFilter) {
@@ -153,7 +204,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 ConnectedExchange.KUCOIN -> listOf("kucoin")
                 ConnectedExchange.BITSTAMP -> listOf("bitstamp")
                 ConnectedExchange.ALL_CONNECTED -> attachedIds.ifEmpty {
-                    listOf("kraken", "coinbase", "kucoin", "bitstamp")
+                    listOf("kraken", "coinbase", "kucoin")
                 }
             }
 
@@ -167,7 +218,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (attachedIds.isNotEmpty()) {
                         attachedIds.joinToString(" + ") { it.replaceFirstChar { c -> c.uppercase() } }
                     } else {
-                        "All 4 Exchanges"
+                        "Kraken · Coinbase · KuCoin"
                     }
                 }
                 else -> effectiveFilter.shortLabel
@@ -1772,7 +1823,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- AI Trading Advisor (Firebase AI Logic) ---
+    // --- AI Trading Advisor (Firebase AI Logic · Gemini 3.8 Flash) ---
+
+    private fun observeLiveAdvisorContext() {
+        viewModelScope.launch {
+            combine(
+                _marketsState,
+                _tradeState,
+                _vaultState,
+                _arbitrageState
+            ) { markets, trade, vault, arb ->
+                trade.symbol to buildDeskContextSummary(markets, trade, vault, arb)
+            }.collect { (symbol, summary) ->
+                _advisorState.update { st ->
+                    if (st.liveContextPreview == summary && st.contextSymbol == symbol) st
+                    else st.copy(
+                        liveContextPreview = summary,
+                        contextSymbol = symbol,
+                        contextUpdatedAtMs = System.currentTimeMillis()
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshAdvisorMarketContext() {
+        viewModelScope.launch {
+            _advisorState.update { it.copy(isRefreshingContext = true) }
+            refreshMarkets()
+            refreshFearAndGreed()
+            pullHistoricalBacktestData()
+            delay(500L)
+            val summary = buildDeskContextSummary()
+            _advisorState.update {
+                it.copy(
+                    liveContextPreview = summary,
+                    contextSymbol = _tradeState.value.symbol,
+                    contextUpdatedAtMs = System.currentTimeMillis(),
+                    isRefreshingContext = false
+                )
+            }
+        }
+    }
+
+    fun clearAdvisorConversation() {
+        if (_advisorState.value.isGenerating) return
+        val sym = _tradeState.value.symbol
+        val summary = buildDeskContextSummary()
+        _advisorState.update {
+            AdvisorUiState(
+                messages = listOf(
+                    AdvisorMessage(
+                        id = "welcome_${System.currentTimeMillis()}",
+                        isUser = false,
+                        text = "Fresh Gemini session started with live $sym market telemetry, Fear & Greed sentiment, active strategy signal, and current portfolio state."
+                    )
+                ),
+                liveContextPreview = summary,
+                contextSymbol = sym,
+                contextUpdatedAtMs = System.currentTimeMillis()
+            )
+        }
+    }
 
     fun sendAdvisorMessage(prompt: String) {
         val clean = prompt.trim()
@@ -1780,17 +1892,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val currentHistory = _advisorState.value.messages
         val userMsg = AdvisorMessage(id = "u_${System.currentTimeMillis()}", isUser = true, text = clean)
+        val deskContext = buildDeskContextSummary()
 
         _advisorState.update {
             it.copy(
                 messages = currentHistory + userMsg,
                 streamingReply = "",
                 isGenerating = true,
-                errorMessage = null
+                errorMessage = null,
+                liveContextPreview = deskContext,
+                contextSymbol = _tradeState.value.symbol,
+                contextUpdatedAtMs = System.currentTimeMillis()
             )
         }
-
-        val deskContext = buildDeskContextSummary()
 
         viewModelScope.launch {
             var latestReply = ""
@@ -1845,12 +1959,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sendAdvisorMessage(lastUserPrompt)
     }
 
-    private fun buildDeskContextSummary(): String {
-        val trade = _tradeState.value
-        val vault = _vaultState.value
-        val breadth = _marketsState.value.breadth
+    private fun buildDeskContextSummary(
+        markets: MarketsUiState = _marketsState.value,
+        trade: TradeUiState = _tradeState.value,
+        vault: VaultUiState = _vaultState.value,
+        arb: ArbitrageUiState = _arbitrageState.value
+    ): String {
+        val tickers = (markets.tickersState as? UiState.Success)?.data.orEmpty()
+        val activeTicker = tickers.firstOrNull { it.symbol.equals(trade.symbol, ignoreCase = true) }
+        val breadth = markets.breadth
+        val fg = (markets.fearGreedState as? UiState.Success)?.data
+        val news = (markets.newsState as? UiState.Success)?.data.orEmpty()
         val sig = trade.liveSignal
         val bt = trade.backtestResult
+        val indBt = trade.indicatorBacktestResult
         val isLive = trade.executionMode == ExecutionMode.LIVE
         val liveSnap = trade.liveAccountSnapshot
         val holdingsLine = if (isLive) {
@@ -1866,15 +1988,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         return buildString {
             appendLine("Execution Mode: ${if (isLive) "LIVE (${trade.liveExecutionRoute.shortBadge})" else "PAPER (Simulated Local Ledger)"}")
-            appendLine("Active Symbol: ${trade.symbol} (${trade.timeframe.label}), Strategy: ${trade.strategy.title}")
+            if (activeTicker != null) {
+                appendLine(
+                    "Active Asset: ${activeTicker.symbol} (${activeTicker.name}) | Spot ${Formatters.formatUsd(activeTicker.priceUsd)} | 24h ${Formatters.formatPct(activeTicker.change24hPct)} | Range ${Formatters.formatUsd(activeTicker.low24h)}–${Formatters.formatUsd(activeTicker.high24h)} | Vol ${Formatters.formatCompactUsd(activeTicker.volume24hUsd)}"
+                )
+            } else {
+                appendLine("Active Asset: ${trade.symbol} (${trade.timeframe.label})")
+            }
+            appendLine("Timeframe & Strategy: ${trade.timeframe.label} · ${trade.strategy.title} · Overlay ${trade.overlay.label}")
             if (sig != null) {
-                appendLine("Live Signal: ${sig.action} (${(sig.confidence * 100).toInt()}% conf) @ ${Formatters.formatUsd(sig.entryPrice)} — ${sig.reason}")
+                appendLine("Live Technical Signal: ${sig.action} (${(sig.confidence * 100).toInt()}% conf) @ ${Formatters.formatUsd(sig.entryPrice)} — ${sig.reason}")
             }
             if (bt != null) {
-                appendLine("Backtest: Total ${Formatters.formatPct(bt.totalReturnPct)}, Val ${Formatters.formatPct(bt.validationReturnPct)}, WinRate ${"%.1f".format(bt.winRatePct)}%, MaxDD ${"%.2f".format(bt.maxDrawdownPct)}% (${bt.totalTrades} trades)")
+                appendLine("Strategy Backtest: Total ${Formatters.formatPct(bt.totalReturnPct)}, Val ${Formatters.formatPct(bt.validationReturnPct)}, WinRate ${"%.1f".format(bt.winRatePct)}%, MaxDD ${"%.2f".format(bt.maxDrawdownPct)}% (${bt.totalTrades} trades)")
+            }
+            if (indBt != null) {
+                val indNames = indBt.config.selectedIndicators.joinToString("+") { it.label }
+                appendLine("Indicator Studio (${indNames}, ${indBt.config.confluenceRule.name}): Return ${Formatters.formatPct(indBt.totalReturnPct)} vs Hold ${Formatters.formatPct(indBt.buyHoldReturnPct)} (Alpha ${Formatters.formatPct(indBt.alphaPct)}), WinRate ${"%.1f".format(indBt.winRatePct)}%, MaxDD ${"%.2f".format(indBt.maxDrawdownPct)}%, Trades ${indBt.totalTrades}")
             }
             if (breadth != null) {
                 appendLine("Market Breadth: ${breadth.advancing}/${breadth.totalAssets} advancing, Avg 24h ${Formatters.formatPct(breadth.avgChangePct)}")
+            }
+            if (fg != null) {
+                appendLine("Crypto Fear & Greed Index: ${fg.liveValue}/100 (${fg.liveClassification})")
+            }
+            if (tickers.isNotEmpty()) {
+                val gainers = tickers.sortedByDescending { it.change24hPct }.take(3)
+                    .joinToString { "${it.symbol} ${Formatters.formatPct(it.change24hPct)}" }
+                val decliners = tickers.sortedBy { it.change24hPct }.take(3)
+                    .joinToString { "${it.symbol} ${Formatters.formatPct(it.change24hPct)}" }
+                appendLine("Top Movers: Gainers [$gainers] | Decliners [$decliners]")
+            }
+            val topArb = arb.opportunities.maxByOrNull { it.worstCaseNetBps }
+            if (topArb != null) {
+                appendLine("Top Arbitrage Route (${topArb.symbol}): ${topArb.buyVenue} -> ${topArb.sellVenue} | Net ${"%.1f".format(topArb.worstCaseNetBps)} bps (${Formatters.formatUsd(topArb.worstCaseNetUsd.toDouble())}) | Qualified=${topArb.qualified}")
+            }
+            if (news.isNotEmpty()) {
+                val headlines = news.take(2).joinToString(" | ") { "${it.source}: ${it.title}" }
+                appendLine("Latest Headlines: $headlines")
             }
             if (isLive) {
                 appendLine("Live Exchange Account (${trade.liveExecutionRoute.shortBadge}): AvailableCash=${Formatters.formatUsd(trade.liveAvailableCashUsd)}, LiveEquity=${Formatters.formatUsd(trade.liveEquityUsd)}, Synced=${liveSnap?.isSynced == true}, Autopilot=${vault.account.autopilotRunning}, RiskProfile=${vault.account.riskProfile}")
@@ -1882,7 +2033,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("Paper Account: USD=${Formatters.formatUsd(vault.account.usdBalance)}, Equity=${Formatters.formatUsd(vault.totalPortfolioEquityUsd)}, Drawdown=${"%.2f".format(vault.currentDrawdownPct)}%, Autopilot=${vault.account.autopilotRunning}, RiskProfile=${vault.account.riskProfile}")
             }
             appendLine("Open Holdings: $holdingsLine")
-        }
+        }.trim()
     }
 
     fun logSecurityEvent(eventType: String, summary: String) {

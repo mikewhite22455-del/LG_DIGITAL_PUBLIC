@@ -40,7 +40,7 @@ object BiometricAuthManager {
 
     fun isBiometricLockEnabled(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_BIOMETRIC_LOCK_ENABLED, true)
+            .getBoolean(KEY_BIOMETRIC_LOCK_ENABLED, false)
     }
 
     fun setBiometricLockEnabled(context: Context, enabled: Boolean) {
@@ -50,7 +50,7 @@ object BiometricAuthManager {
 
     fun isAutoLockOnBackgroundEnabled(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_AUTO_LOCK_BACKGROUND, true)
+            .getBoolean(KEY_AUTO_LOCK_BACKGROUND, false)
     }
 
     fun setAutoLockOnBackgroundEnabled(context: Context, enabled: Boolean) {
@@ -69,20 +69,24 @@ object BiometricAuthManager {
     }
 
     fun checkCapability(context: Context): BiometricCapability {
-        val manager = BiometricManager.from(context)
-        return when (manager.canAuthenticate(allowedAuthenticators())) {
-            BiometricManager.BIOMETRIC_SUCCESS -> BiometricCapability.READY
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricCapability.NOT_ENROLLED
-            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricCapability.TEMPORARILY_UNAVAILABLE
-            BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> BiometricCapability.SECURITY_UPDATE_REQUIRED
-            else -> BiometricCapability.NO_HARDWARE
-        }
+        return runCatching {
+            val manager = BiometricManager.from(context)
+            when (manager.canAuthenticate(allowedAuthenticators())) {
+                BiometricManager.BIOMETRIC_SUCCESS -> BiometricCapability.READY
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricCapability.NOT_ENROLLED
+                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricCapability.TEMPORARILY_UNAVAILABLE
+                BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> BiometricCapability.SECURITY_UPDATE_REQUIRED
+                else -> BiometricCapability.NO_HARDWARE
+            }
+        }.getOrDefault(BiometricCapability.NO_HARDWARE)
     }
 
     fun hasStrongBiometricsEnrolled(context: Context): Boolean {
-        val manager = BiometricManager.from(context)
-        return manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-            BiometricManager.BIOMETRIC_SUCCESS
+        return runCatching {
+            val manager = BiometricManager.from(context)
+            manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                BiometricManager.BIOMETRIC_SUCCESS
+        }.getOrDefault(false)
     }
 
     fun openBiometricEnrollment(context: Context) {
@@ -129,32 +133,39 @@ object BiometricAuthManager {
         onError: (errorCode: Int, message: String) -> Unit,
         onFailed: () -> Unit = {}
     ) {
-        val executor = ContextCompat.getMainExecutor(activity)
-        val callback = object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                super.onAuthenticationSucceeded(result)
-                onSuccess()
+        runCatching {
+            val executor = ContextCompat.getMainExecutor(activity)
+            val callback = object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    onError(errorCode, errString.toString())
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    onFailed()
+                }
             }
 
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                super.onAuthenticationError(errorCode, errString)
-                onError(errorCode, errString.toString())
-            }
+            val prompt = BiometricPrompt(activity, executor, callback)
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setAllowedAuthenticators(allowedAuthenticators())
+                .setConfirmationRequired(confirmationRequired)
+                .build()
 
-            override fun onAuthenticationFailed() {
-                super.onAuthenticationFailed()
-                onFailed()
-            }
+            prompt.authenticate(promptInfo)
+        }.onFailure { err ->
+            onError(
+                BiometricPrompt.ERROR_HW_UNAVAILABLE,
+                err.localizedMessage ?: "Biometric prompt is unavailable on this device."
+            )
         }
-
-        val prompt = BiometricPrompt(activity, executor, callback)
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setAllowedAuthenticators(allowedAuthenticators())
-            .setConfirmationRequired(confirmationRequired)
-            .build()
-
-        prompt.authenticate(promptInfo)
     }
 }

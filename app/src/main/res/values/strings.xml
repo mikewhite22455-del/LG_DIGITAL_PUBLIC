@@ -19,4 +19,14 @@
     <string name="settings_subtitle">ANDROID COMMAND · AES-256-GCM VAULT</string>
     <string name="settings_close_content_desc">Close secure settings</string>
     <string name="settings_open_content_desc">Open secure settings</string>
+    <string name="dashboard_coin_search_title">GLOBAL EXCHANGE COIN SEARCH</string>
+    <string name="dashboard_coin_search_placeholder">Search Kraken, Coinbase &amp; KuCoin coins…</string>
+    <string name="dashboard_coin_search_cd">Search supported coins across Kraken, Coinbase, and KuCoin</string>
+    <string name="dashboard_coin_search_clear_cd">Clear coin search</string>
+    <string name="dashboard_coin_search_toggle_cd">Toggle coin autocomplete dropdown</string>
+    <string name="dashboard_coin_search_refresh_cd">Refresh Kraken, Coinbase, and KuCoin coin directory</string>
+    <string name="dashboard_coin_search_syncing">Syncing live listings from Kraken, Coinbase &amp; KuCoin…</string>
+    <string name="dashboard_coin_search_empty_title">No matching coins found</string>
+    <string name="dashboard_coin_search_empty_subtitle">Try another ticker, coin name, or switch exchange filter.</string>
+    <string name="dashboard_coin_search_open_trade">Open in Trade Desk</string>
 </resources>

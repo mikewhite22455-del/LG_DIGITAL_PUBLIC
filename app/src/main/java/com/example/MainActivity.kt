@@ -488,8 +488,12 @@ fun LgDigitalAppShell(
         FloatingAiChatBoxSheet(
             advisorState = advisorState,
             activeSymbol = tradeState.symbol,
+            marketsState = marketsState,
+            tradeState = tradeState,
             onSendPrompt = viewModel::sendAdvisorMessage,
             onRetryLastPrompt = viewModel::retryLastAdvisorMessage,
+            onRefreshContext = viewModel::refreshAdvisorMarketContext,
+            onClearChat = viewModel::clearAdvisorConversation,
             onOpenFullAdvisor = { navigateToTab(AdvisorRoute) },
             onDismiss = { showFloatingAiChat = false }
         )
@@ -1142,6 +1146,8 @@ fun LgDigitalAppShell(
                             isWide = isWide,
                             onSendAdvisorPrompt = viewModel::sendAdvisorMessage,
                             onRetryLastPrompt = viewModel::retryLastAdvisorMessage,
+                            onClearChat = viewModel::clearAdvisorConversation,
+                            onRefreshContext = viewModel::refreshAdvisorMarketContext,
                             onSelectStrategy = viewModel::selectStrategy,
                             onSelectCoin = viewModel::selectTradeSymbol
                         )
