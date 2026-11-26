@@ -770,7 +770,7 @@ private fun PortfolioHeroM3Card(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Image(
-                            painter = painterResource(id = R.drawable.img_user_lg_coin),
+                            painter = painterResource(id = R.drawable.lg_digital_emblem),
                             contentDescription = "LG Digital token crest",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier

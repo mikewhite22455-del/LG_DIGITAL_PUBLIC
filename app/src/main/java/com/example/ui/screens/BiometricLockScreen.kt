@@ -111,7 +111,7 @@ fun BiometricLockScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.img_user_lg_coin),
+                        painter = painterResource(id = R.drawable.lg_digital_emblem),
                         contentDescription = "LG Digital emblem",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
