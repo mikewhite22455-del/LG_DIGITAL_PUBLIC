@@ -336,7 +336,7 @@ fun MembershipBillingScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Image(
-                                    painter = painterResource(id = R.drawable.img_user_lg_coin),
+                                    painter = painterResource(id = R.drawable.lg_digital_emblem),
                                     contentDescription = "LG Digital membership crest",
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier

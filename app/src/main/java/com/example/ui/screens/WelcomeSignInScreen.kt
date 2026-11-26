@@ -307,7 +307,7 @@ private fun ClassicWelcomeContent(
                 .border(1.4.dp, LgColors.Turquoise.copy(alpha = 0.85f), CircleShape)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.img_user_lg_coin),
+                painter = painterResource(id = R.drawable.lg_digital_emblem),
                 contentDescription = "LG Digital emblem",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -644,7 +644,7 @@ private fun MemberSignInContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.img_user_lg_coin),
+                    painter = painterResource(id = R.drawable.lg_digital_emblem),
                     contentDescription = "LG Digital logo",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
