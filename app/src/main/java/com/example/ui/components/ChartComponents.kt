@@ -199,9 +199,9 @@ fun CandlestickChart(
                     drawLineSeries(ema26, LgColors.AmberWarn, 2.0f)
                 }
                 ChartOverlay.BOLLINGER -> {
-                    drawLineSeries(bb.map { it?.first }, LgColors.CyanGlow.copy(alpha = 0.85f), 1.6f)
-                    drawLineSeries(bb.map { it?.second }, LgColors.GoldBright, 1.8f)
-                    drawLineSeries(bb.map { it?.third }, LgColors.CyanGlow.copy(alpha = 0.85f), 1.6f)
+                    drawLineSeries(bb.map { it.upper }, LgColors.CyanGlow.copy(alpha = 0.85f), 1.6f)
+                    drawLineSeries(bb.map { it.mid }, LgColors.GoldBright, 1.8f)
+                    drawLineSeries(bb.map { it.lower }, LgColors.CyanGlow.copy(alpha = 0.85f), 1.6f)
                 }
                 ChartOverlay.SUPERTREND -> {
                     drawLineSeries(ema12, LgColors.Turquoise, 2.2f)
