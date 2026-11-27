@@ -327,4 +327,575 @@ private fun ClassicWelcomeContent(
                 fontFamily = LgBrandFontFamily,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 34.sp,
-                letterSpacing =
+                letterSpacing = 2.6.sp,
+                color = LgColors.GoldBright,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Adaptive USD/CAD Exchange Scanner, Live TradingView Feeds, Arbitrage, AI Copilot & Universal Miner Suite",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LgColors.InkSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+        }
+
+        // Classic 4-Feature Matrix Card
+        CyberFrameCard(
+            title = "COMMAND SUITE OVERVIEW",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                WelcomeFeaturePill(
+                    icon = Icons.Filled.CandlestickChart,
+                    title = "Live Feeds",
+                    subtitle = "TradingView & Spot",
+                    accent = LgColors.Turquoise,
+                    modifier = Modifier.weight(1f)
+                )
+                WelcomeFeaturePill(
+                    icon = Icons.Filled.Bolt,
+                    title = "Adaptive Bot",
+                    subtitle = "USD / CAD Scanner",
+                    accent = LgColors.GoldBright,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                WelcomeFeaturePill(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AI Advisor",
+                    subtitle = "Quant Copilot",
+                    accent = LgColors.CyanGlow,
+                    modifier = Modifier.weight(1f)
+                )
+                WelcomeFeaturePill(
+                    icon = Icons.Filled.Memory,
+                    title = "Universal Miner",
+                    subtitle = "Any Rig / Any Coin",
+                    accent = LgColors.Gold,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // Primary CTAs
+        GoldMetallicButton(
+            text = if (existingSession != null) "SIGN IN / SWITCH ACCOUNT" else "SIGN IN TO LG DIGITAL",
+            onClick = onGoToSignIn,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp)
+                .testTag("welcome_go_to_signin_button")
+        )
+
+        OutlinedButton(
+            onClick = onOpenMembershipSignUp,
+            border = BorderStroke(1.4.dp, LgColors.GoldBright.copy(alpha = 0.85f)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 50.dp)
+                .testTag("welcome_membership_signup_button")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.WorkspacePremium,
+                contentDescription = null,
+                tint = LgColors.GoldBright,
+                modifier = Modifier.padding(end = 8.dp).size(20.dp)
+            )
+            Text(
+                text = "MEMBERSHIP SIGN-UP & BILLING PLANS",
+                style = TabLabelTextStyle,
+                color = LgColors.GoldBright
+            )
+        }
+
+        OutlinedButton(
+            onClick = onEnterDeskDirect,
+            border = BorderStroke(1.3.dp, LgColors.Turquoise.copy(alpha = 0.78f)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 50.dp)
+                .testTag("welcome_enter_desk_button")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Login,
+                contentDescription = null,
+                tint = LgColors.Turquoise,
+                modifier = Modifier.padding(end = 8.dp).size(20.dp)
+            )
+            Text(
+                text = if (existingSession != null) {
+                    "ENTER DESK AS ${existingSession.displayName.uppercase()}"
+                } else {
+                    "ENTER LIVE DESK"
+                },
+                style = TabLabelTextStyle,
+                color = LgColors.Turquoise
+            )
+        }
+
+        // Social Media Links right on Welcome Screen
+        CyberFrameCard(
+            title = "FOLLOW LG DIGITAL",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SocialMediaLinksBar(compact = true)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun WelcomeFeaturePill(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .circuitTextFieldBackdrop(cornerRadius = 10.dp)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(22.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = LgColors.InkPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = LgColors.InkSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemberSignInContent(
+    onBackToWelcome: () -> Unit,
+    onOpenMembershipSignUp: () -> Unit,
+    onSignedIn: (MemberSession) -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    var emailInput by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var activeSocialDialog by remember { mutableStateOf<SocialPlatform?>(null) }
+    var socialHandleInput by remember { mutableStateOf("") }
+
+    activeSocialDialog?.let { provider ->
+        val promptLabel = when (provider) {
+            SocialPlatform.GOOGLE -> "Google Email (e.g. trader@gmail.com)"
+            SocialPlatform.FACEBOOK -> "Facebook Name or Email"
+            SocialPlatform.TELEGRAM -> "Telegram @username"
+            else -> "Account Handle"
+        }
+        val portalUrl = when (provider) {
+            SocialPlatform.GOOGLE -> "https://accounts.google.com"
+            SocialPlatform.FACEBOOK -> "https://www.facebook.com/login/"
+            SocialPlatform.TELEGRAM -> "https://oauth.telegram.org"
+            else -> provider.url
+        }
+
+        AlertDialog(
+            onDismissRequest = { activeSocialDialog = null },
+            containerColor = LgColors.PanelSlate,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SocialBrandBadge(platform = provider, size = 30.dp)
+                    Text(
+                        text = "Continue with ${provider.label}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = LgColors.GoldBright
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Connect your ${provider.label} member profile to unlock your LG Digital desk session.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LgColors.InkSecondary
+                    )
+                    OutlinedTextField(
+                        value = socialHandleInput,
+                        onValueChange = { socialHandleInput = it },
+                        label = { Text(promptLabel) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LgColors.Turquoise,
+                            unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .circuitTextFieldBackdrop(cornerRadius = 10.dp, drawBorder = false)
+                            .testTag("signin_provider_handle_input")
+                    )
+                    OutlinedButton(
+                        onClick = { runCatching { uriHandler.openUri(portalUrl) } },
+                        border = BorderStroke(1.dp, LgColors.Turquoise.copy(alpha = 0.65f)),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            tint = LgColors.Turquoise,
+                            modifier = Modifier.size(16.dp).padding(end = 6.dp)
+                        )
+                        Text("Open ${provider.label} Portal", color = LgColors.Turquoise)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleaned = socialHandleInput.trim()
+                        val display = when {
+                            cleaned.isNotBlank() -> cleaned.substringBefore("@").ifBlank { cleaned }
+                            else -> "${provider.label} Member"
+                        }
+                        val handle = cleaned.ifBlank { "${provider.label.lowercase()}@lgdigital.ca" }
+                        activeSocialDialog = null
+                        socialHandleInput = ""
+                        onSignedIn(
+                            MemberSession(
+                                displayName = display,
+                                provider = provider.label,
+                                handleOrEmail = handle
+                            )
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LgColors.GoldBright,
+                        contentColor = LgColors.ObsidianBg
+                    ),
+                    modifier = Modifier.testTag("confirm_social_signin_button")
+                ) {
+                    Text("Sign In", fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeSocialDialog = null }) {
+                    Text("Cancel", color = LgColors.InkSecondary)
+                }
+            }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 500.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(
+                onClick = onBackToWelcome,
+                modifier = Modifier.testTag("signin_back_to_welcome_button")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to Welcome Screen",
+                    tint = LgColors.GoldBright
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.lg_digital_emblem),
+                    contentDescription = "LG Digital logo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .border(1.2.dp, LgColors.Gold, CircleShape)
+                )
+                Text(
+                    text = "LG DIGITAL",
+                    fontFamily = LgBrandFontFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    letterSpacing = 2.2.sp,
+                    color = LgColors.GoldBright
+                )
+            }
+            Spacer(modifier = Modifier.size(48.dp))
+        }
+
+        CyberFrameCard(
+            title = "MEMBER SIGN IN",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Sign in with Google, Facebook, Telegram, or your Member Email to access your LG Digital desk.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LgColors.InkSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // 1. GOOGLE Sign-In Button
+            Button(
+                onClick = {
+                    socialHandleInput = ""
+                    activeSocialDialog = SocialPlatform.GOOGLE
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF1F1F1F)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .testTag("signin_google_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SocialBrandBadge(platform = SocialPlatform.GOOGLE, size = 24.dp)
+                    Text(
+                        text = "Continue with Google",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1F1F1F)
+                    )
+                }
+            }
+
+            // 2. FACEBOOK Sign-In Button
+            Button(
+                onClick = {
+                    socialHandleInput = ""
+                    activeSocialDialog = SocialPlatform.FACEBOOK
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF1877F2),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .testTag("signin_facebook_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SocialBrandBadge(platform = SocialPlatform.FACEBOOK, size = 24.dp)
+                    Text(
+                        text = "Continue with Facebook",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            // 3. TELEGRAM Sign-In Button
+            Button(
+                onClick = {
+                    socialHandleInput = ""
+                    activeSocialDialog = SocialPlatform.TELEGRAM
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF229ED9),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .testTag("signin_telegram_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SocialBrandBadge(platform = SocialPlatform.TELEGRAM, size = 24.dp)
+                    Text(
+                        text = "Continue with Telegram",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = LgColors.Gold.copy(alpha = 0.35f))
+                Text(
+                    text = "OR EMAIL SIGN IN",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LgColors.InkMuted
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = LgColors.Gold.copy(alpha = 0.35f))
+            }
+
+            OutlinedTextField(
+                value = emailInput,
+                onValueChange = {
+                    emailInput = it
+                    emailError = null
+                },
+                label = { Text("Member Email") },
+                leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = LgColors.Turquoise) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LgColors.Turquoise,
+                    unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .circuitTextFieldBackdrop(cornerRadius = 12.dp, drawBorder = false)
+                    .testTag("signin_email_input")
+            )
+
+            OutlinedTextField(
+                value = passwordInput,
+                onValueChange = {
+                    passwordInput = it
+                    emailError = null
+                },
+                label = { Text("Password") },
+                leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = LgColors.Gold) },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LgColors.Turquoise,
+                    unfocusedBorderColor = LgColors.Gold.copy(alpha = 0.55f),
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .circuitTextFieldBackdrop(cornerRadius = 12.dp, drawBorder = false)
+                    .testTag("signin_password_input")
+            )
+
+            emailError?.let { err ->
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LgColors.Crimson
+                )
+            }
+
+            GoldMetallicButton(
+                text = "SIGN IN WITH EMAIL",
+                onClick = {
+                    val trimmed = emailInput.trim()
+                    if (trimmed.isBlank() || !trimmed.contains("@")) {
+                        emailError = "Enter a valid email address or choose Google, Facebook, or Telegram above."
+                    } else {
+                        onSignedIn(
+                            MemberSession(
+                                displayName = trimmed.substringBefore("@"),
+                                provider = "Email",
+                                handleOrEmail = trimmed
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .testTag("signin_email_submit_button")
+            )
+
+            OutlinedButton(
+                onClick = onOpenMembershipSignUp,
+                border = BorderStroke(1.2.dp, LgColors.GoldBright.copy(alpha = 0.8f)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("signin_membership_signup_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.WorkspacePremium,
+                    contentDescription = null,
+                    tint = LgColors.GoldBright,
+                    modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                )
+                Text("New Member? Sign Up & Billing Plans", color = LgColors.GoldBright)
+            }
+
+            TextButton(
+                onClick = {
+                    onSignedIn(
+                        MemberSession(
+                            displayName = "LG Guest",
+                            provider = "Paper Desk",
+                            handleOrEmail = "Local Paper Session"
+                        )
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("signin_guest_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.VerifiedUser,
+                    contentDescription = null,
+                    tint = LgColors.Turquoise,
+                    modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                )
+                Text("Continue to Paper Trading Desk", color = LgColors.Turquoise)
+            }
+        }
+
+        CyberFrameCard(
+            title = "COMMUNITY & SOCIAL CHANNELS",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SocialMediaLinksBar(compact = true)
+        }
+    }
+}
